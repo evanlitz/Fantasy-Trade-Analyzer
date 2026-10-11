@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ledger — Dynasty Trade Calculator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,400..800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <span class="mark">Ledger</span>
+    <span class="meta">Dynasty trade calculator · 1QB · PPR · consensus of 8 sources · values built <span id="built">…</span></span>
+  </header>
+
+  <main class="calc">
+    <section class="side" data-side="a">
+      <h2 class="side-head">Team A gets</h2>
+      <div class="search">
+        <input type="text" placeholder="Search players and picks" autocomplete="off" spellcheck="false">
+        <ul class="results" hidden></ul>
+      </div>
+      <ol class="rows"></ol>
+      <div class="totals"><span class="pieces"></span><span class="total num"></span></div>
+    </section>
+
+    <section class="side" data-side="b">
+      <h2 class="side-head">Team B gets</h2>
+      <div class="search">
+        <input type="text" placeholder="Search players and picks" autocomplete="off" spellcheck="false">
+        <ul class="results" hidden></ul>
+      </div>
+      <ol class="rows"></ol>
+      <div class="totals"><span class="pieces"></span><span class="total num"></span></div>
+    </section>
+
+    <section class="result">
+      <div class="balance"><div class="fair-zone"></div><div class="fill"></div></div>
+      <div class="verdict">
+        <p class="verdict-text"></p>
+        <button type="button" class="clear">Clear</button>
+      </div>
+      <div class="even" hidden>
+        <h3 class="even-head"></h3>
+        <ol class="even-rows"></ol>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
