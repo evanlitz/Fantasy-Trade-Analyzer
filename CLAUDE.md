@@ -4,7 +4,8 @@
 check (exit code 1 if any step failed). Scrapers in `sources/` write `data/<source>.csv`; `combine.py` builds `data/consensus.csv`
 (refresh also saves a dated copy to `data/history/YYYY-MM-DD.csv`);
 `trade.py` is the evaluator (KTC's value adjustment, ported and verified). `league.py` values a Sleeper league's teams
-(league ID fixed in `app.py`). `sources/app.py` serves the frontend in `web/`: trade calculator (`index.html`) and league
+(league ID fixed in `app.py`) and a trade's impact on both teams (`League.trade`; league assets are Sleeper player IDs
+and picks as `season-round-r<original roster id>`). Tests: `python -m unittest discover tests` (no network). `sources/app.py` serves the frontend in `web/`: trade calculator (`index.html`) and league
 analyzer (`league.html`).
 
 ## Frontend design tokens (do not drift from these)

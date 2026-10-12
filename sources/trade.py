@@ -113,13 +113,8 @@ def score(a, b, top):
     }
 
 
-def evaluate(side_a, side_b, assets=None):
-    if not side_a or not side_b:
-        raise ValueError('Both sides need at least one asset, e.g. "Jahmyr Gibbs" vs "Kenneth Walker, Garrett Wilson"')
-    assets = assets or load_assets()
-    a = [find(q, assets) for q in side_a]
-    b = [find(q, assets) for q in side_b]
-    top = max(r["Value"] for r in assets)
+def verdict(a, b, top, pool_a, pool_b):
+    # pool_a/pool_b: assets that could be added to that side to even it (a team's own roster in league trades)
     s = score(a, b, top)
     winner = "A" if s["final_a"] >= s["final_b"] else "B"
     fair = equal_within(s["final_a"], s["final_b"])
@@ -133,10 +128,20 @@ def evaluate(side_a, side_b, assets=None):
             t = score(a, b + [extra], top) if winner == "A" else score(a + [extra], b, top)
             return abs(t["final_a"] - t["final_b"])
 
-        suggestions = sorted((r for r in assets if r["Asset ID"] not in in_trade), key=gap_after)[:3]
+        pool = pool_b if winner == "A" else pool_a
+        suggestions = sorted((r for r in pool if r["Asset ID"] not in in_trade), key=gap_after)[:3]
 
     return {**s, "side_a": a, "side_b": b, "winner": winner, "fair": fair,
             "margin": abs(s["final_a"] - s["final_b"]), "suggestions": suggestions}
+
+
+def evaluate(side_a, side_b, assets=None):
+    if not side_a or not side_b:
+        raise ValueError('Both sides need at least one asset, e.g. "Jahmyr Gibbs" vs "Kenneth Walker, Garrett Wilson"')
+    assets = assets or load_assets()
+    a = [find(q, assets) for q in side_a]
+    b = [find(q, assets) for q in side_b]
+    return verdict(a, b, max(r["Value"] for r in assets), assets, assets)
 
 
 def report(result):

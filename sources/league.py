@@ -6,7 +6,7 @@ import requests
 
 from common import DATA_DIR, HEADERS
 from ids import sleeper_players
-from trade import load_assets
+from trade import find, load_assets, verdict
 from trade import raw as star
 
 API = "https://api.sleeper.app/v1"
@@ -23,6 +23,8 @@ ABSENCE = {"QB": 0.10, "RB": 0.18, "WR": 0.13, "TE": 0.13}
 BYE = 1 / 17
 SIM_WEEKS = 2000
 WIN_NOW_WEIGHT = 0.5
+# A trade's start-share changes smaller than this aren't worth listing
+START_CHANGE = 0.10
 # Flock Fantasy's classification: rows are win-now rank bands, columns are dynasty rank bands (top 2, top half, bottom half, bottom 2)
 TIER_GRID = [
     ["Juggernaut", "Strong Contender", "All In", "All In"],
@@ -68,12 +70,19 @@ def best_lineup(players, slots):
     return lineup
 
 
-def start_shares(players, slots, seed):
+def absences(pid, position):
+    # Seeded by the player's own ID, so a player misses the same simulated weeks on any roster and a trade's
+    # before/after difference is the trade, not simulation noise
+    rng = random.Random(f"absence-{pid}")
+    miss = ABSENCE[position] + BYE
+    return [rng.random() < miss for _ in range(SIM_WEEKS)]
+
+
+def start_shares(players, slots, absent):
     # Share of simulated weeks each player is in the best available lineup; bench players earn starts covering absences
-    rng = random.Random(seed)
     starts = {p["id"]: 0 for p in players}
-    for _ in range(SIM_WEEKS):
-        available = [p for p in players if rng.random() > ABSENCE[p["position"]] + BYE]
+    for week in range(SIM_WEEKS):
+        available = [p for p in players if not absent[p["id"]][week]]
         for p in best_lineup(available, slots):
             starts[p["id"]] += 1
     return {pid: n / SIM_WEEKS for pid, n in starts.items()}
@@ -95,95 +104,241 @@ def project_tiers(rosters, win_now):
             for i, r in enumerate(order)}
 
 
+def fetch(league_id):
+    return {
+        "league": get(f"/league/{league_id}"),
+        "users": get(f"/league/{league_id}/users"),
+        "rosters": get(f"/league/{league_id}/rosters"),
+        "traded": get(f"/league/{league_id}/traded_picks"),
+        "drafts": get(f"/league/{league_id}/drafts"),
+    }
+
+
+class League:
+    # Rosters are built once from Sleeper; score() values any version of them, so a trade is the same rosters with
+    # assets moved, scored again
+
+    def __init__(self, raw, assets, now_values, sleeper):
+        league = raw["league"]
+        users = {u["user_id"]: u for u in raw["users"]}
+        self.league = league
+        self.raw_rosters = raw["rosters"]
+        self.values = {a["Asset ID"]: a for a in assets}
+        self.top = max(a["Value"] for a in assets)
+        self.now_values = now_values
+        self.slots = [s for s in league["roster_positions"] if s in SLOT_ELIGIBLE]
+        # Starters plus bench; taxi and IR don't count against it
+        self.roster_limit = len(league["roster_positions"])
+        self.names = {r["roster_id"]: team_name(r, users) for r in raw["rosters"]}
+        self.records = {r["roster_id"]: f"{r['settings']['wins']}-{r['settings']['losses']}" for r in raw["rosters"]}
+        self.seasons = pick_seasons(league, raw["drafts"])
+        self.absent = {}
+        self.shares_memo = {}
+
+        self.rosters = {}
+        for r in raw["rosters"]:
+            taxi, reserve = set(r.get("taxi") or []), set(r.get("reserve") or [])
+            players, unvalued = [], []
+            for pid in r["players"] or []:
+                asset = self.values.get(pid)
+                info = sleeper.get(pid, {})
+                position = info.get("position") or pid
+                flags = {"taxi": pid in taxi, "reserve": pid in reserve}
+                if not asset:
+                    if position in VALUED_POSITIONS:
+                        unvalued.append({"id": pid, "name": info.get("full_name", pid), "position": position, **flags})
+                    continue
+                players.append({"id": pid, "name": asset["Player Name"], "position": asset["Position"], **flags,
+                                "team": asset["Team"], "age": float(asset["Age"]) if asset["Age"] else None,
+                                "raw": asset["Value"], "now": now_values.get(pid, 0)})
+            spots = sum(1 for pid in r["players"] or [] if pid not in taxi and pid not in reserve)
+            self.rosters[r["roster_id"]] = {"players": players, "picks": [], "unvalued": unvalued, "spots": spots}
+
+        owner = {(s, rnd, r["roster_id"]): r["roster_id"]
+                 for s in self.seasons for rnd in range(1, league["settings"]["draft_rounds"] + 1) for r in raw["rosters"]}
+        for p in raw["traded"]:
+            key = (p["season"], p["round"], p["roster_id"])
+            if key in owner:
+                owner[key] = p["owner_id"]
+        for (season, rnd, original), current in sorted(owner.items()):
+            self.rosters[current]["picks"].append(
+                {"id": f"{season}-{rnd}-r{original}", "season": season, "round": rnd, "original": original})
+
+        self.base = self.score(self.rosters)
+        # Every tradeable asset: a player by Sleeper ID, a pick by season, round and original roster
+        self.owner = {a["id"]: rid for rid, t in self.rosters.items() for a in t["players"] + t["picks"]}
+
+    @classmethod
+    def load(cls, league_id):
+        return cls(fetch(league_id), load_assets(), redraft_values(), sleeper_players())
+
+    def shares(self, active):
+        key = frozenset(p["id"] for p in active)
+        if key not in self.shares_memo:
+            for p in active:
+                if p["id"] not in self.absent:
+                    self.absent[p["id"]] = absences(p["id"], p["position"])
+            self.shares_memo[key] = start_shares(active, self.slots, self.absent)
+        return self.shares_memo[key]
+
+    def score(self, rosters):
+        teams = {}
+        for rid, r in rosters.items():
+            players = [{**p, "value": p["raw"] * TAXI_FACTOR if p["taxi"] else p["raw"]} for p in r["players"]]
+            players.sort(key=lambda p: -p["value"])
+            teams[rid] = {"roster_id": rid, "team": self.names[rid],
+                          "record": self.records[rid],
+                          "players": players, "picks": [], "unvalued": r["unvalued"]}
+
+        win_now = {}
+        for rid, t in teams.items():
+            # Taxi players can't start, so they only count toward the dynasty score
+            active = [p for p in t["players"] if not p["taxi"]]
+            shares = self.shares(active)
+            for p in t["players"]:
+                p["start"] = shares.get(p["id"], 0)
+            win_now[rid] = sum(p["now"] * p["start"] for p in active)
+        tiers = project_tiers(self.raw_rosters, win_now)
+        for rid, r in rosters.items():
+            for p in r["picks"]:
+                projected = p["season"] == self.seasons[0]
+                tier = tiers[p["original"]] if projected else "mid"
+                asset = self.values.get(f"{p['season']}-{p['round']}-{tier}")
+                teams[rid]["picks"].append({**p, "tier": tier, "projected": projected,
+                                            "from": None if p["original"] == rid else self.names[p["original"]],
+                                            "value": asset["Value"] if asset else 0})
+
+        out = []
+        for rid, t in teams.items():
+            t["win_now"] = win_now[rid]
+            curved = lambda p: star(p["raw"], self.top, self.top) * (TAXI_FACTOR if p["taxi"] else 1)
+            # Dynasty score by asset group, star-curved so one elite player outweighs several depth pieces
+            t["positions"] = {pos: sum(curved(p) for p in t["players"] if p["position"] == pos)
+                              for pos in sorted(VALUED_POSITIONS)}
+            t["positions"]["PICK"] = sum(star(p["value"], self.top, self.top) for p in t["picks"])
+            t["dynasty"] = sum(t["positions"].values())
+            t["roster_value"] = sum(p["value"] for p in t["players"] if not p["taxi"])
+            t["taxi_value"] = sum(p["value"] for p in t["players"] if p["taxi"])
+            t["picks_value"] = sum(p["value"] for p in t["picks"])
+            # Value-weighted, so a team's core sets its age rather than its deep bench
+            aged = [p for p in t["players"] if p["age"]]
+            t["age"] = sum(p["age"] * p["value"] for p in aged) / sum(p["value"] for p in aged) if aged else None
+            out.append(t)
+
+        n = len(out)
+        best_now, best_dynasty = max(t["win_now"] for t in out), max(t["dynasty"] for t in out)
+        now_rank = {t["roster_id"]: i for i, t in enumerate(sorted(out, key=lambda t: -t["win_now"]), 1)}
+        dynasty_rank = {t["roster_id"]: i for i, t in enumerate(sorted(out, key=lambda t: -t["dynasty"]), 1)}
+        for t in out:
+            rid = t["roster_id"]
+            t["win_now_rank"], t["dynasty_rank"] = now_rank[rid], dynasty_rank[rid]
+            # Each score as a share of the league's best, blended, on a 0-100 scale
+            t["overall"] = 100 * (WIN_NOW_WEIGHT * t["win_now"] / best_now
+                                  + (1 - WIN_NOW_WEIGHT) * t["dynasty"] / best_dynasty)
+            t["tier"] = TIER_GRID[band(now_rank[rid], n)][band(dynasty_rank[rid], n)]
+        out.sort(key=lambda t: -t["overall"])
+        return {"league": self.league["name"], "season": self.league["season"], "pick_seasons": self.seasons,
+                "teams": out}
+
+    def team(self, result, rid):
+        return next(t for t in result["teams"] if t["roster_id"] == rid)
+
+    def market(self, asset_id):
+        # What the trade calculator prices an asset at: consensus value, picks at their pre-trade projected tier
+        rid = self.owner[asset_id]
+        t = self.team(self.base, rid)
+        p = next(x for x in t["players"] + t["picks"] if x["id"] == asset_id)
+        if "season" in p:
+            return {"Asset ID": asset_id, "Player Name": f"{p['season']} R{p['round']} {p['tier']}"
+                    + (f" (from {p['from']})" if p["from"] else ""), "Type": "Pick", "Position": "PICK",
+                    "Team": "", "Value": p["value"]}
+        return {"Asset ID": asset_id, "Player Name": p["name"], "Type": "Player", "Position": p["position"],
+                "Team": p["team"], "Value": p["raw"]}
+
+    def side_owner(self, ids, label):
+        if not ids:
+            raise ValueError(f"Side {label} is empty")
+        missing = [i for i in ids if i not in self.owner]
+        if missing:
+            raise ValueError(f"Side {label}: {', '.join(missing)} not on any roster (or has no consensus value)")
+        owners = {self.owner[i] for i in ids}
+        if len(owners) > 1:
+            raise ValueError(f"Side {label} has assets from {len(owners)} teams; each side is one team")
+        return owners.pop()
+
+    def after_trade(self, ra, a_ids, rb, b_ids):
+        rosters = dict(self.rosters)
+        for rid, out_ids, other, in_ids in ((ra, a_ids, rb, b_ids), (rb, b_ids, ra, a_ids)):
+            mine, theirs = self.rosters[rid], self.rosters[other]
+            leaving = [p for p in mine["players"] if p["id"] in out_ids]
+            # Received players arrive on the bench, off taxi and IR
+            arriving = [{**p, "taxi": False, "reserve": False} for p in theirs["players"] if p["id"] in in_ids]
+            players = [p for p in mine["players"] if p["id"] not in out_ids] + arriving
+            unvalued = list(mine["unvalued"])
+            spots = mine["spots"] - sum(not p["taxi"] and not p["reserve"] for p in leaving) + len(arriving)
+            # Over the roster limit, the cheapest players are assumed cut: unvalued ones first, then by value.
+            # A team already over the limit (offseason) only cuts what the trade adds.
+            cuts = max(0, spots - max(self.roster_limit, mine["spots"]))
+            droppable = lambda p: not p["taxi"] and not p["reserve"]
+            for _ in range(cuts):
+                spare = [p for p in unvalued if droppable(p)]
+                if spare:
+                    unvalued.remove(spare[0])
+                else:
+                    players.remove(min((p for p in players if droppable(p)), key=lambda p: p["raw"]))
+            picks = [p for p in mine["picks"] if p["id"] not in out_ids] + \
+                    [p for p in theirs["picks"] if p["id"] in in_ids]
+            rosters[rid] = {"players": players, "picks": picks, "unvalued": unvalued,
+                            "spots": spots - cuts, "cuts": cuts}
+        return rosters
+
+    def trade(self, a_ids, b_ids):
+        a_ids, b_ids = list(dict.fromkeys(a_ids)), list(dict.fromkeys(b_ids))
+        if set(a_ids) & set(b_ids):
+            raise ValueError("An asset can't be on both sides")
+        ra, rb = self.side_owner(a_ids, "A"), self.side_owner(b_ids, "B")
+        if ra == rb:
+            raise ValueError("Both sides are the same team")
+
+        # Fairness is the trade calculator's market verdict; evening suggestions come from the losing team's roster
+        own = lambda rid: [self.market(i) for i, r in self.owner.items() if r == rid]
+        fair = verdict([self.market(i) for i in a_ids], [self.market(i) for i in b_ids], self.top, own(ra), own(rb))
+
+        rosters = self.after_trade(ra, set(a_ids), rb, set(b_ids))
+        after = self.score(rosters)
+        return {**fair, "teams": {"a": self.impact(ra, rb, after, rosters), "b": self.impact(rb, ra, after, rosters)}}
+
+    def impact(self, rid, other, after, rosters):
+        fields = ["win_now", "win_now_rank", "dynasty", "dynasty_rank", "overall", "tier", "age"]
+        snap = lambda t: {**{f: t[f] for f in fields}, "positions": t["positions"]}
+        before_t, after_t = self.team(self.base, rid), self.team(after, rid)
+
+        # Start share before (on whichever team had the player) and after: every arrival, plus players already
+        # here whose share moved enough to matter
+        before_starts = {p["id"]: p["start"] for r in (rid, other) for p in self.team(self.base, r)["players"]}
+        had = {p["id"] for p in before_t["players"]}
+        starts = [{"id": p["id"], "name": p["name"], "position": p["position"],
+                   "before": before_starts[p["id"]], "after": p["start"], "arrived": p["id"] not in had}
+                  for p in after_t["players"]
+                  if p["id"] not in had or abs(p["start"] - before_starts[p["id"]]) >= START_CHANGE]
+        starts.sort(key=lambda s: (not s["arrived"], -abs(s["after"] - s["before"])))
+
+        # Next draft's picks this team holds whose projected tier moved because win-now scores moved
+        before_tiers = {p["id"]: p["tier"] for r in (rid, other) for p in self.team(self.base, r)["picks"]}
+        picks = [{"id": p["id"], "season": p["season"], "round": p["round"], "from": p["from"],
+                  "before": before_tiers[p["id"]], "after": p["tier"]}
+                 for p in after_t["picks"] if p["tier"] != before_tiers[p["id"]]]
+
+        return {"roster_id": rid, "team": self.names[rid], "before": snap(before_t), "after": snap(after_t),
+                "starts": starts, "pick_tiers": picks, "cuts": rosters[rid]["cuts"]}
+
+    def find(self, query):
+        # CLI lookup: player name or any league asset ID, restricted to assets on a roster
+        return find(query, [self.market(i) for i in self.owner])["Asset ID"]
+
+
 def league_values(league_id):
-    league = get(f"/league/{league_id}")
-    users = {u["user_id"]: u for u in get(f"/league/{league_id}/users")}
-    rosters = get(f"/league/{league_id}/rosters")
-    traded = get(f"/league/{league_id}/traded_picks")
-    drafts = get(f"/league/{league_id}/drafts")
-    values = {a["Asset ID"]: a for a in load_assets()}
-    top = max(a["Value"] for a in values.values())
-    now_values = redraft_values()
-    slots = [s for s in league["roster_positions"] if s in SLOT_ELIGIBLE]
-    sleeper = sleeper_players()
-    names = {r["roster_id"]: team_name(r, users) for r in rosters}
-
-    teams = {}
-    for r in rosters:
-        taxi = set(r["taxi"] or [])
-        players, unvalued = [], []
-        for pid in r["players"] or []:
-            is_taxi = pid in taxi
-            asset = values.get(pid)
-            info = sleeper.get(pid, {})
-            position = info.get("position") or pid
-            if not asset:
-                if position in VALUED_POSITIONS:
-                    unvalued.append({"id": pid, "name": info.get("full_name", pid), "position": position, "taxi": is_taxi})
-                continue
-            raw = asset["Value"]
-            players.append({"id": pid, "name": asset["Player Name"], "position": asset["Position"], "taxi": is_taxi,
-                            "team": asset["Team"], "age": float(asset["Age"]) if asset["Age"] else None,
-                            "raw": raw, "value": raw * TAXI_FACTOR if is_taxi else raw,
-                            "now": now_values.get(pid, 0)})
-        players.sort(key=lambda p: -p["value"])
-        teams[r["roster_id"]] = {"roster_id": r["roster_id"], "team": names[r["roster_id"]],
-                                 "record": f"{r['settings']['wins']}-{r['settings']['losses']}",
-                                 "players": players, "picks": [], "unvalued": unvalued}
-
-    win_now = {}
-    for rid, t in teams.items():
-        # Taxi players can't start, so they only count toward the dynasty score
-        active = [p for p in t["players"] if not p["taxi"]]
-        shares = start_shares(active, slots, seed=rid)
-        for p in t["players"]:
-            p["start"] = shares.get(p["id"], 0)
-        win_now[rid] = sum(p["now"] * p["start"] for p in active)
-    tiers = project_tiers(rosters, win_now)
-    seasons = pick_seasons(league, drafts)
-    owner = {(s, rnd, r["roster_id"]): r["roster_id"]
-             for s in seasons for rnd in range(1, league["settings"]["draft_rounds"] + 1) for r in rosters}
-    for p in traded:
-        key = (p["season"], p["round"], p["roster_id"])
-        if key in owner:
-            owner[key] = p["owner_id"]
-    for (season, rnd, original), current in sorted(owner.items()):
-        tier = tiers[original] if season == seasons[0] else "mid"
-        asset = values.get(f"{season}-{rnd}-{tier}")
-        teams[current]["picks"].append({
-            "season": season, "round": rnd, "tier": tier, "projected": season == seasons[0],
-            "from": None if original == current else names[original],
-            "value": asset["Value"] if asset else 0,
-        })
-
-    out = []
-    for rid, t in teams.items():
-        t["win_now"] = win_now[rid]
-        curved = lambda p: star(p["raw"], top, top) * (TAXI_FACTOR if p["taxi"] else 1)
-        # Dynasty score by asset group, star-curved so one elite player outweighs several depth pieces
-        t["positions"] = {pos: sum(curved(p) for p in t["players"] if p["position"] == pos) for pos in sorted(VALUED_POSITIONS)}
-        t["positions"]["PICK"] = sum(star(p["value"], top, top) for p in t["picks"])
-        t["dynasty"] = sum(t["positions"].values())
-        t["roster_value"] = sum(p["value"] for p in t["players"] if not p["taxi"])
-        t["taxi_value"] = sum(p["value"] for p in t["players"] if p["taxi"])
-        t["picks_value"] = sum(p["value"] for p in t["picks"])
-        # Value-weighted, so a team's core sets its age rather than its deep bench
-        aged = [p for p in t["players"] if p["age"]]
-        t["age"] = sum(p["age"] * p["value"] for p in aged) / sum(p["value"] for p in aged) if aged else None
-        out.append(t)
-
-    n = len(out)
-    best_now, best_dynasty = max(t["win_now"] for t in out), max(t["dynasty"] for t in out)
-    now_rank = {t["roster_id"]: i for i, t in enumerate(sorted(out, key=lambda t: -t["win_now"]), 1)}
-    dynasty_rank = {t["roster_id"]: i for i, t in enumerate(sorted(out, key=lambda t: -t["dynasty"]), 1)}
-    for t in out:
-        rid = t["roster_id"]
-        t["win_now_rank"], t["dynasty_rank"] = now_rank[rid], dynasty_rank[rid]
-        # Each score as a share of the league's best, blended, on a 0-100 scale
-        t["overall"] = 100 * (WIN_NOW_WEIGHT * t["win_now"] / best_now + (1 - WIN_NOW_WEIGHT) * t["dynasty"] / best_dynasty)
-        t["tier"] = TIER_GRID[band(now_rank[rid], n)][band(dynasty_rank[rid], n)]
-    out.sort(key=lambda t: -t["overall"])
-    return {"league": league["name"], "season": league["season"], "pick_seasons": seasons, "teams": out}
+    return League.load(league_id).base
 
 
 def report(result):
@@ -202,6 +357,45 @@ def report(result):
             print(f"  no value: {', '.join(p['name'] + ' ' + p['position'] for p in t['unvalued'])}")
 
 
+def trade_report(result):
+    for label in ("a", "b"):
+        gives = ", ".join(f"{r['Player Name']} ({r['Value']:,.0f})" for r in result["side_" + label])
+        print(f"{result['teams'][label]['team']} gives: {gives}")
+    # Each side is what that team gives, so the "winning" side is the team giving more
+    giver = result["teams"][result["winner"].lower()]["team"]
+    taker = result["teams"]["b" if result["winner"] == "A" else "a"]["team"]
+    verdict_text = "fair" if result["fair"] else f"{giver} gives {result['margin']:,.0f} more"
+    if result["suggestions"]:
+        verdict_text += f"; {taker} could add " + ", ".join(r["Player Name"] for r in result["suggestions"])
+    print("Market: " + verdict_text)
+    for label in ("a", "b"):
+        t = result["teams"][label]
+        b, a = t["before"], t["after"]
+        print(f"\n{t['team']}: {b['tier']} -> {a['tier']}, overall {b['overall']:.1f} -> {a['overall']:.1f}")
+        print(f"  win-now {b['win_now']:,.0f} #{b['win_now_rank']} -> {a['win_now']:,.0f} #{a['win_now_rank']} "
+              f"({a['win_now'] - b['win_now']:+,.0f})")
+        print(f"  dynasty {b['dynasty']:,.0f} #{b['dynasty_rank']} -> {a['dynasty']:,.0f} #{a['dynasty_rank']} "
+              f"({a['dynasty'] - b['dynasty']:+,.0f})")
+        print("  by position: " + ", ".join(f"{pos} {a['positions'][pos] - b['positions'][pos]:+,.0f}"
+                                             for pos in b["positions"] if round(a["positions"][pos] - b["positions"][pos])))
+        for s in t["starts"]:
+            print(f"  {s['name']} {s['position']}: starts {s['before']:.0%} -> {s['after']:.0%}")
+        for p in t["pick_tiers"]:
+            print(f"  {p['season']} R{p['round']}" + (f" (from {p['from']})" if p["from"] else "")
+                  + f": projects {p['before']} -> {p['after']}")
+
+
 if __name__ == "__main__":
+    # python league.py <league_id>                              league report
+    # python league.py <league_id> "Jahmyr Gibbs" vs "Garrett Wilson, 2027-1-r4"   trade impact
     sys.stdout.reconfigure(encoding="utf-8")
-    report(league_values(sys.argv[1]))
+    if len(sys.argv) == 2:
+        report(league_values(sys.argv[1]))
+    else:
+        lg = League.load(sys.argv[1])
+        a, _, b = " ".join(sys.argv[2:]).partition(" vs ")
+        try:
+            trade_report(lg.trade([lg.find(q) for q in a.split(",") if q.strip()],
+                                  [lg.find(q) for q in b.split(",") if q.strip()]))
+        except ValueError as e:
+            sys.exit(str(e))
