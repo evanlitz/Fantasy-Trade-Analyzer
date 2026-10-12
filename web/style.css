@@ -244,3 +244,125 @@ body {
   .calc { grid-template-columns: 1fr; }
   .even { width: 100%; }
 }
+
+/* nav (shared header) */
+.nav { display: flex; gap: var(--s3); font-size: 13px; font-weight: 600; }
+.nav a { color: var(--muted); text-decoration: none; padding-bottom: 2px; border-bottom: 2px solid transparent; }
+.nav a:hover { color: var(--ink); }
+.nav a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--ink); }
+
+/* league analyzer */
+.wide .top { max-width: 1312px; }
+.league {
+  display: grid;
+  gap: var(--s4);
+  max-width: 1312px;
+  margin: 0 auto;
+  padding: var(--s3) var(--s4);
+  align-items: start;
+}
+.tname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.team-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  padding: 0 var(--s3);
+  height: var(--row);
+  line-height: var(--row);
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.team-name { margin: 0; font-size: 15px; font-weight: 700; }
+.team-record, .team-rank { font-size: 12px; color: var(--line); }
+.team-total { margin-left: auto; font-size: 16px; font-weight: 700; }
+
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); border-top: 0; background: #fff; }
+.stat { display: flex; flex-direction: column; gap: 2px; padding: var(--s2) var(--s3); }
+.stat + .stat { border-left: 1px solid var(--line); }
+.stat-label { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.stat-value { font-size: 18px; font-weight: 700; }
+.stat-rank { font-size: 12px; color: var(--muted); }
+
+.section-head {
+  margin: var(--s3) 0 var(--s1);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.section-head span { margin-left: var(--s2); font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--muted); }
+
+.strength, .power-table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid var(--line); font-size: 13px; }
+.strength th, .power-table th {
+  height: 28px;
+  padding: 0 var(--s2);
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+.strength td, .power-table td { height: var(--row); padding: 0 var(--s2); border-top: 1px solid var(--paper); }
+.r { text-align: right; }
+.bar-col { width: 45%; }
+.meter { position: relative; height: 8px; background: var(--paper); border-radius: var(--radius); }
+.meter-fill { height: 100%; background: var(--up); border-radius: var(--radius); }
+.meter-avg { position: absolute; top: -3px; width: 2px; height: 14px; margin-left: -1px; background: var(--ink); }
+.pos { color: var(--up); }
+.neg { color: var(--down); }
+.standing { width: 72px; font-size: 12px; color: var(--muted); }
+
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s4); }
+.pos-head {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--s1) var(--s2);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: var(--s1);
+}
+.pos-group + .pos-group { margin-top: var(--s2); }
+.analysis .row { grid-template-columns: 40px 1fr auto 40px; }
+.flag { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; color: var(--muted); text-align: center; }
+.row.taxi { border-style: dashed; }
+.unvalued { margin: var(--s2) 0 0; font-size: 12px; color: var(--muted); }
+
+.power-table tbody tr { cursor: pointer; }
+.power-table tbody tr:hover { background: var(--paper); }
+.power-table tr.selected { background: var(--paper); }
+.power-table tr td:first-child { border-left: 3px solid transparent; }
+.power-table tr.selected td:first-child { border-left-color: var(--up); }
+.power-table .strong { font-weight: 700; }
+.power-table .best { color: var(--up); font-weight: 700; }
+
+@media (max-width: 900px) {
+  .split { grid-template-columns: 1fr; }
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .power { overflow-x: auto; }
+}
+.strength th.r, .power-table th.r { text-align: right; }
+
+/* team tiers (Flock Fantasy classification) */
+.tier {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: var(--radius);
+  color: var(--c);
+  background: color-mix(in srgb, var(--c) 12%, #fff);
+  white-space: nowrap;
+}
+.tier.juggernaut { --c: var(--up); color: #fff; background: var(--up); }
+.tier.strong-contender { --c: var(--up); }
+.tier.all-in { --c: var(--qb); }
+.tier.balanced { --c: var(--te); }
+.tier.strong-rebuilder { --c: var(--wr); }
+.tier.purgatory { --c: var(--down); }
+.tier.pip-squeak { --c: var(--down); color: #fff; background: var(--down); }
+.team-head .tier { align-self: center; line-height: 1.4; }
+.rk { color: var(--muted); font-size: 11px; }

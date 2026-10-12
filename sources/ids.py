@@ -55,9 +55,9 @@ def sleeper_id_from(field, value):
 
 
 @cache
-def sleeper_players():
+def sleeper_players(force=False):
     DATA_DIR.mkdir(exist_ok=True)
-    if not SLEEPER_CACHE.exists() or time.time() - SLEEPER_CACHE.stat().st_mtime > SLEEPER_MAX_AGE:
+    if force or not SLEEPER_CACHE.exists() or time.time() - SLEEPER_CACHE.stat().st_mtime > SLEEPER_MAX_AGE:
         response = requests.get(SLEEPER_URL, headers=HEADERS, timeout=120)
         response.raise_for_status()
         # parse before caching so an error page never becomes the cache for a day

@@ -1,14 +1,27 @@
 import json
+import time
 from collections import Counter
 from datetime import datetime
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from common import DATA_DIR
+from league import league_values
 from trade import evaluate, load_assets
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 PORT = 8000
+LEAGUE_ID = "1395495049021652992"
+LEAGUE_CACHE_SECONDS = 600
+league_cache = {"at": 0, "data": None}
+
+
+def cached_league():
+    # Rosters move slowly; this keeps page reloads from re-hitting Sleeper five times each
+    if time.time() - league_cache["at"] > LEAGUE_CACHE_SECONDS:
+        league_cache["data"] = league_values(LEAGUE_ID)
+        league_cache["at"] = time.time()
+    return league_cache["data"]
 
 
 def asset_list():
@@ -41,6 +54,8 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path == "/api/assets":
             built = datetime.fromtimestamp((DATA_DIR / "consensus.csv").stat().st_mtime)
             return self.send_json({"assets": asset_list(), "built": built.strftime("%b %d, %H:%M")})
+        if self.path == "/api/league":
+            return self.send_json(cached_league())
         return super().do_GET()
 
     def do_POST(self):

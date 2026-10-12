@@ -1,7 +1,10 @@
 # Ledger — dynasty trade analyzer
 
-1QB, PPR, no TE premium. Scrapers in `sources/` write `data/<source>.csv`; `combine.py` builds `data/consensus.csv`;
-`trade.py` is the evaluator (KTC's value adjustment, ported and verified). `sources/app.py` serves the frontend in `web/`.
+1QB, PPR, no TE premium. `python sources/refresh.py` is the daily run: Sleeper player DB, every scraper, combine, league
+check (exit code 1 if any step failed). Scrapers in `sources/` write `data/<source>.csv`; `combine.py` builds `data/consensus.csv`;
+`trade.py` is the evaluator (KTC's value adjustment, ported and verified). `league.py` values a Sleeper league's teams
+(league ID fixed in `app.py`). `sources/app.py` serves the frontend in `web/`: trade calculator (`index.html`) and league
+analyzer (`league.html`).
 
 ## Frontend design tokens (do not drift from these)
 
@@ -15,6 +18,8 @@
 | `--down` | `#A8432F` | Losing side, negative delta (sparingly) |
 
 - Position tags (text on a pale tint of the same hue): QB `#8C4A32`, RB `#3F6650`, WR `#4A5A6B`, TE `#7E6A2A`, PICK `#6E6A62`
+- Team tier tags (same tint style): Juggernaut solid `--up`, Strong Contender `--up`, All In QB rust, Balanced TE ochre,
+  Strong Rebuilder WR slate, Purgatory `--down`, Pip Squeak solid `--down`
 - Fonts: Archivo (UI, semi-condensed via `font-stretch`), JetBrains Mono (every number)
 - Radius: `2px` everywhere. Spacing scale: 4 / 8 / 12 / 16 / 24 px. Rows 32px tall, 4px gap
 - No shadows: separation comes from 1px `--line` borders and `--ink` header bars
