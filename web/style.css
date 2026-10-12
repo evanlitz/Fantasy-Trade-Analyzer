@@ -68,16 +68,76 @@ body {
 .result { grid-column: 1 / -1; }
 
 .side-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
   margin: 0;
   padding: 0 var(--s3);
   height: var(--row);
-  line-height: var(--row);
   background: var(--ink);
   color: var(--paper);
   font-size: 14px;
   font-weight: 700;
   border-radius: var(--radius) var(--radius) 0 0;
 }
+.side-head .tier { line-height: 1.4; }
+.side-rec { font: 400 12px var(--mono); color: var(--line); }
+.side-verb { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--line); }
+/* the team picker is the header itself: a select dressed as the side's title */
+.team-select { position: relative; min-width: 0; }
+.team-select::after {
+  content: "▾";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  color: var(--line);
+  pointer-events: none;
+}
+.team-pick {
+  appearance: none;
+  max-width: 100%;
+  height: 24px;
+  padding: 0 16px 0 0;
+  border: 0;
+  border-bottom: 1px dashed var(--muted);
+  border-radius: 0;
+  background: transparent;
+  color: var(--paper);
+  font: 700 14px var(--ui);
+  font-stretch: 87.5%;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.team-pick:hover, .team-pick:focus { outline: none; border-bottom-color: var(--paper); }
+.team-pick option { color: var(--ink); background: #fff; font-weight: 400; }
+.calc[data-mode="free"] .team-select,
+.calc[data-mode="free"] .side-tier,
+.calc[data-mode="free"] .side-rec,
+.calc[data-mode="free"] .side-verb,
+.calc[data-mode="free"] .browse { display: none; }
+.calc[data-mode="league"] .side-label { display: none; }
+
+/* mode bar */
+.calc-bar { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--s3); }
+.mode { display: flex; border: 1px solid var(--ink); border-radius: var(--radius); }
+.mode button {
+  height: 26px;
+  padding: 0 var(--s3);
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: 600 13px var(--ui);
+  font-stretch: 87.5%;
+  cursor: pointer;
+}
+.mode button + button { border-left: 1px solid var(--ink); }
+.mode button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.mode button:disabled { color: var(--muted); cursor: not-allowed; }
+.league-name { font-weight: 400; }
+.calc-note { color: var(--muted); font-size: 12px; }
+.calc-bar .clear { margin-left: auto; }
 
 /* search */
 .search { position: relative; margin: var(--s1) 0; }
@@ -209,6 +269,7 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: var(--s3);
+  min-height: 40px;
   padding: var(--s2) 0;
   border-bottom: 1px solid var(--line);
 }
@@ -240,10 +301,147 @@ body {
 }
 .even .row { background: none; }
 
+/* browse roster */
+.browse { margin-top: var(--s1); }
+.browse summary {
+  height: 28px;
+  line-height: 28px;
+  padding: 0 var(--s2);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+  list-style: none;
+}
+.browse summary::before { content: "+ "; font-family: var(--mono); }
+.browse[open] summary::before { content: "− "; }
+.browse summary:hover { color: var(--ink); border-color: var(--muted); }
+.browse summary .num { font-size: 11px; }
+.browse-body { max-height: 360px; overflow-y: auto; padding-top: var(--s1); }
+.browse-group + .browse-group { margin-top: var(--s2); }
+.browse .row { background: none; }
+
+/* team impact */
+.impact { grid-column: 1 / -1; }
+.impact .section-head { margin-top: var(--s1); }
+.impact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s4); }
+.impact-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  padding: 0 var(--s3);
+  height: var(--row);
+  line-height: var(--row);
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+.impact-name { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.impact-rank { font-size: 12px; color: var(--line); white-space: nowrap; }
+.impact-overall { margin-left: auto; font-size: 16px; font-weight: 700; }
+.impact-body { padding: var(--s2) var(--s3) var(--s3); background: #fff; border: 1px solid var(--line); border-top: 0; }
+.impact-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s1) var(--s2);
+  padding-bottom: var(--s2);
+  border-bottom: 1px solid var(--paper);
+}
+.tier-move { display: inline-flex; align-items: center; gap: var(--s1); }
+.tier-move .arrow { color: var(--muted); font-size: 12px; }
+.holds { font-size: 11px; color: var(--muted); }
+.headline { font-weight: 600; }
+.overall-delta { margin-left: auto; font-size: 12px; font-weight: 700; }
+.impact-sub {
+  margin: var(--s3) 0 var(--s1);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.impact-sub small { margin-left: var(--s1); font-weight: 400; letter-spacing: 0; text-transform: none; }
+.impact-empty { margin: 0; font-size: 12px; color: var(--muted); }
+
+/* win-now / dynasty: label, rank ladder, rank, value, % change */
+.metric {
+  display: grid;
+  grid-template-columns: 56px 1fr 56px 52px 52px;
+  align-items: center;
+  gap: var(--s2);
+  height: var(--row);
+  border-bottom: 1px solid var(--paper);
+}
+.metric-label { font-size: 12px; font-weight: 700; }
+.metric-rank, .metric-value, .metric-delta { font-size: 12px; text-align: right; }
+.metric-rank { color: var(--muted); }
+.metric-value { font-weight: 600; }
+.metric-delta { font-weight: 700; }
+.ladder { display: grid; grid-template-columns: repeat(var(--n), 1fr); height: 16px; }
+.cell { position: relative; }
+.cell::before { content: ""; position: absolute; left: 50%; top: 5px; width: 6px; height: 6px; margin-left: -3px; border-radius: 50%; background: var(--line); }
+.cell.path::after { content: ""; position: absolute; top: 7px; height: 2px; left: 0; right: 0; background: var(--c); }
+.cell.path.start::after { left: 50%; }
+.cell.path.end::after { right: 50%; }
+.cell.up { --c: var(--up); }
+.cell.down { --c: var(--down); }
+.cell.was::before { top: 3px; width: 10px; height: 10px; margin-left: -5px; background: #fff; border: 2px solid var(--c, var(--ink)); box-sizing: border-box; z-index: 1; }
+.cell.now::before { top: 3px; width: 10px; height: 10px; margin-left: -5px; background: var(--c, var(--ink)); z-index: 1; }
+
+/* dynasty value by position: diverging bars from a center line */
+.pos-row { display: grid; grid-template-columns: 40px 1fr 64px; align-items: center; gap: var(--s2); height: 24px; }
+.div-bar { position: relative; height: 10px; }
+.div-mid { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--muted); }
+.div-fill { position: absolute; top: 0; bottom: 0; border-radius: var(--radius); background: var(--c); }
+.div-fill.QB, .lu-now.QB { --c: var(--qb); }
+.div-fill.RB, .lu-now.RB { --c: var(--rb); }
+.div-fill.WR, .lu-now.WR { --c: var(--wr); }
+.div-fill.TE, .lu-now.TE { --c: var(--te); }
+.div-fill.PICK, .lu-now.PICK { --c: var(--pick); }
+.pos-delta { font-size: 12px; font-weight: 600; text-align: right; }
+.pos-delta.zero { color: var(--line); }
+
+/* lineup: start share after (fill) over before (outline) */
+.lineup, .pick-moves { margin: 0; padding: 0; list-style: none; }
+.lu-row { display: grid; grid-template-columns: 40px minmax(0, 1fr) 20px 96px 72px; align-items: center; gap: var(--s2); height: 26px; }
+.lu-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lu-in { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; color: var(--up); }
+.lu-meter { position: relative; height: 10px; background: var(--paper); border-radius: var(--radius); }
+.lu-now { position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--radius); background: var(--c); }
+.lu-was { position: absolute; left: 0; top: -2px; bottom: -2px; border: 1px solid var(--ink); border-radius: var(--radius); }
+.lu-pct { font-size: 12px; text-align: right; color: var(--muted); }
+.pick-moves li { display: grid; grid-template-columns: 40px 1fr auto; align-items: center; gap: var(--s2); height: 26px; }
+.pick-moves small { color: var(--muted); }
+.pick-tier { font-size: 12px; color: var(--muted); }
+.pick-tier.now { color: var(--ink); font-weight: 700; }
+
 @media (max-width: 720px) {
   .calc { grid-template-columns: 1fr; }
   .even { width: 100%; }
+  .impact-grid { grid-template-columns: 1fr; }
+  .calc-note { display: none; }
+  .lu-row { grid-template-columns: 40px minmax(0, 1fr) 16px 56px 64px; gap: var(--s1); }
+  .metric { grid-template-columns: 52px 1fr 48px 44px 48px; gap: var(--s1); }
 }
+
+/* league page: jump to the calculator with this team on side B */
+.trade-link {
+  align-self: center;
+  height: 22px;
+  line-height: 20px;
+  padding: 0 var(--s2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--paper);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.trade-link:hover { background: var(--paper); color: var(--ink); }
 
 /* nav (shared header) */
 .nav { display: flex; gap: var(--s3); font-size: 13px; font-weight: 600; }

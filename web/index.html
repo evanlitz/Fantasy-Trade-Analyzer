@@ -16,40 +16,77 @@
     <span class="meta">1QB · PPR · consensus of 8 sources · values built <span id="built">…</span></span>
   </header>
 
-  <main class="calc">
+  <main class="calc" data-mode="league">
+    <div class="calc-bar">
+      <div class="mode" role="group" aria-label="Calculator mode">
+        <button type="button" data-mode="league" aria-pressed="true">League <span class="league-name"></span></button>
+        <button type="button" data-mode="free" aria-pressed="false">Any player</button>
+      </div>
+      <span class="calc-note"></span>
+      <button type="button" class="clear">Clear</button>
+    </div>
+
     <section class="side" data-side="a">
-      <h2 class="side-head">Team A gets</h2>
+      <div class="side-head">
+        <span class="side-label">Team A gets</span>
+        <span class="team-select"><select class="team-pick" aria-label="Team A"></select></span>
+        <span class="side-tier"></span>
+        <span class="side-rec"></span>
+        <span class="side-verb">sends</span>
+      </div>
       <div class="search">
         <input type="text" placeholder="Search players and picks" autocomplete="off" spellcheck="false">
         <ul class="results" hidden></ul>
       </div>
       <ol class="rows"></ol>
       <div class="totals"><span class="pieces"></span><span class="total num"></span></div>
+      <details class="browse" hidden>
+        <summary></summary>
+        <div class="browse-body"></div>
+      </details>
     </section>
 
     <section class="side" data-side="b">
-      <h2 class="side-head">Team B gets</h2>
+      <div class="side-head">
+        <span class="side-label">Team B gets</span>
+        <span class="team-select"><select class="team-pick" aria-label="Team B"></select></span>
+        <span class="side-tier"></span>
+        <span class="side-rec"></span>
+        <span class="side-verb">sends</span>
+      </div>
       <div class="search">
         <input type="text" placeholder="Search players and picks" autocomplete="off" spellcheck="false">
         <ul class="results" hidden></ul>
       </div>
       <ol class="rows"></ol>
       <div class="totals"><span class="pieces"></span><span class="total num"></span></div>
+      <details class="browse" hidden>
+        <summary></summary>
+        <div class="browse-body"></div>
+      </details>
     </section>
 
     <section class="result">
       <div class="balance"><div class="fair-zone"></div><div class="fill"></div></div>
       <div class="verdict">
         <p class="verdict-text"></p>
-        <button type="button" class="clear">Clear</button>
       </div>
       <div class="even" hidden>
         <h3 class="even-head"></h3>
         <ol class="even-rows"></ol>
       </div>
     </section>
+
+    <section class="impact" hidden>
+      <h3 class="section-head">Team impact <span>both rosters re-scored with the trade · win-now = simulated weekly lineup, dynasty = all assets star-curved</span></h3>
+      <div class="impact-grid">
+        <div class="impact-team" data-side="a"></div>
+        <div class="impact-team" data-side="b"></div>
+      </div>
+    </section>
   </main>
 
+  <script src="impact.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

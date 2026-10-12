@@ -127,6 +127,12 @@ function select(rosterId) {
   document.querySelector('.team-record').textContent = t.record;
   document.querySelector('.team-rank').textContent = `#${ranks.overall[rosterId]} of ${n()}`;
   document.querySelector('.team-total').textContent = t.overall.toFixed(1);
+  // Your team (remembered by the calculator) on side A, this team on side B
+  let mine = null;
+  try { mine = Number(localStorage.getItem('ledger.myTeam')) || null; } catch { /* storage blocked */ }
+  const link = document.querySelector('.trade-link');
+  link.hidden = mine === rosterId;
+  link.href = `/#${mine ? `ta=${mine}&` : ''}tb=${rosterId}`;
   document.querySelector('.stats').innerHTML =
     stat('Win-now', fmt(t.win_now), t.win_now_rank, 'expected weekly lineup, 2026 values')
     + stat('Dynasty', fmt(t.dynasty), t.dynasty_rank, 'all assets, star-curved')

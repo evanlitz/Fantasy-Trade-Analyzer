@@ -237,6 +237,8 @@ class League:
                                   + (1 - WIN_NOW_WEIGHT) * t["dynasty"] / best_dynasty)
             t["tier"] = TIER_GRID[band(now_rank[rid], n)][band(dynasty_rank[rid], n)]
         out.sort(key=lambda t: -t["overall"])
+        for i, t in enumerate(out, 1):
+            t["overall_rank"] = i
         return {"league": self.league["name"], "season": self.league["season"], "pick_seasons": self.seasons,
                 "teams": out}
 
@@ -309,7 +311,7 @@ class League:
         return {**fair, "teams": {"a": self.impact(ra, rb, after, rosters), "b": self.impact(rb, ra, after, rosters)}}
 
     def impact(self, rid, other, after, rosters):
-        fields = ["win_now", "win_now_rank", "dynasty", "dynasty_rank", "overall", "tier", "age"]
+        fields = ["win_now", "win_now_rank", "dynasty", "dynasty_rank", "overall", "overall_rank", "tier", "age"]
         snap = lambda t: {**{f: t[f] for f in fields}, "positions": t["positions"]}
         before_t, after_t = self.team(self.base, rid), self.team(after, rid)
 
