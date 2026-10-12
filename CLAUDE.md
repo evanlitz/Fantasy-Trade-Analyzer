@@ -1,7 +1,8 @@
 # Ledger — dynasty trade analyzer
 
 1QB, PPR, no TE premium. `python sources/refresh.py` is the daily run: Sleeper player DB, every scraper, combine, league
-check (exit code 1 if any step failed). Scrapers in `sources/` write `data/<source>.csv`; `combine.py` builds `data/consensus.csv`;
+check (exit code 1 if any step failed). Scrapers in `sources/` write `data/<source>.csv`; `combine.py` builds `data/consensus.csv`
+(refresh also saves a dated copy to `data/history/YYYY-MM-DD.csv`);
 `trade.py` is the evaluator (KTC's value adjustment, ported and verified). `league.py` values a Sleeper league's teams
 (league ID fixed in `app.py`). `sources/app.py` serves the frontend in `web/`: trade calculator (`index.html`) and league
 analyzer (`league.html`).
