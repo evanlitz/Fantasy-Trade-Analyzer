@@ -1,10 +1,20 @@
 import csv
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
+
+import requests
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 # RosterAudit blocks default python/curl user agents
 HEADERS = {"User-Agent": "DynastyTradeAnal/0.1"}
+# Sleeper IP-blocks above 1000 calls a minute (docs.sleeper.com). Spacing calls 0.5s apart caps one process at 120 a
+# minute, so the app server and a refresh running at the same time still stay under a quarter of the limit
+SLEEPER_INTERVAL = 0.5
+SLEEPER_RETRIES = 3
+_sleeper_lock = threading.Lock()
+_sleeper_last = [0.0]
 COLUMNS = ["Player Name", "Type", "Position", "Team", "Age", "Value", "Asset ID", "Scraped At"]
 
 TEAMS = {
@@ -15,6 +25,23 @@ TEAM_ALIASES = {
     "GBP": "GB", "KCC": "KC", "LVR": "LV", "NEP": "NE", "NOS": "NO", "SFO": "SF", "TBB": "TB",
     "JAC": "JAX", "LA": "LAR", "": "FA", None: "FA",
 }
+
+
+def sleeper_get(url, params=None, timeout=30):
+    # Every Sleeper call goes through here. The lock is held while waiting, so the app server's threads queue up
+    # instead of firing together. A 429 means we're already close to a block: back off and retry, never hammer
+    for attempt in range(SLEEPER_RETRIES + 1):
+        with _sleeper_lock:
+            wait = _sleeper_last[0] + SLEEPER_INTERVAL - time.monotonic()
+            if wait > 0:
+                time.sleep(wait)
+            response = requests.get(url, params=params, headers=HEADERS, timeout=timeout)
+            _sleeper_last[0] = time.monotonic()
+        if response.status_code != 429 or attempt == SLEEPER_RETRIES:
+            break
+        time.sleep(float(response.headers.get("Retry-After") or 2 ** (attempt + 1)))
+    response.raise_for_status()
+    return response
 
 
 def normalize_team(code):

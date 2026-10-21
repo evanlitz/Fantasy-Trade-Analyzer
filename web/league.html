@@ -3,28 +3,35 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Ledger — League Analyzer</title>
+  <title>Ledger League</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,400..800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:ital,wght@0,400..900;1,400..900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="wide">
   <header class="top">
     <span class="mark">Ledger</span>
-    <nav class="nav"><a href="/">Trade</a><a href="/league.html" aria-current="page">League</a></nav>
+    <nav class="nav"><a href="/">Trade</a><a href="/league.html" aria-current="page">League</a><a href="/waivers.html">Waivers</a></nav>
     <span class="meta" id="league-meta">Loading league…</span>
   </header>
 
   <main class="league">
-    <section class="power">
-      <h3 class="section-head">Power rankings <span>overall = win-now and dynasty, each as % of the league's best, 50/50 · click a team to analyze it</span></h3>
+    <section class="standings">
+      <h3 class="section-head">Standings</h3>
       <table class="power-table">
         <thead>
           <tr>
-            <th class="r">#</th><th>Team</th><th>Tier</th><th class="r">Rec</th><th class="r">Overall</th>
-            <th class="r">Win-now</th><th class="r">Dynasty</th><th class="r">QB</th><th class="r">RB</th><th class="r">WR</th>
-            <th class="r">TE</th><th class="r">Age</th>
+            <th class="r">#</th><th>Team</th><th>Tier</th><th class="r">Rec</th>
+            <th class="r"><button type="button" data-sort="overall">Overall</button></th>
+            <th class="r"><button type="button" data-sort="win_now">Win-now</button></th>
+            <th class="r"><button type="button" data-sort="dynasty">Dynasty</button></th>
+            <th class="sq-col"><button type="button" data-sort="QB">QB</button></th>
+            <th class="sq-col"><button type="button" data-sort="RB">RB</button></th>
+            <th class="sq-col"><button type="button" data-sort="WR">WR</button></th>
+            <th class="sq-col"><button type="button" data-sort="TE">TE</button></th>
+            <th class="sq-col"><button type="button" data-sort="PICK">PK</button></th>
+            <th class="r"><button type="button" data-sort="age">Age</button></th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -37,31 +44,40 @@
         <span class="team-tier"></span>
         <span class="team-record"></span>
         <span class="team-rank"></span>
-        <span class="team-total num"></span>
         <a class="trade-link" href="/">Trade with this team</a>
+        <span class="team-total num"></span>
       </div>
-
       <div class="stats"></div>
 
-      <h3 class="section-head">Dynasty strength by position <span>star-curved value vs league · tick = league average</span></h3>
-      <table class="strength">
-        <thead><tr><th>Pos</th><th class="r">Value</th><th class="r">Rank</th><th class="bar-col"></th><th class="r">vs avg</th><th></th></tr></thead>
-        <tbody></tbody>
-      </table>
-
-      <div class="split">
-        <div>
-          <h3 class="section-head">Roster</h3>
-          <div class="roster"></div>
-        </div>
-        <div>
-          <h3 class="section-head">Picks <span class="picks-note"></span></h3>
-          <ol class="rows pick-rows"></ol>
+      <div class="lg-team">
+        <section>
+          <h3 class="section-head">Depth chart</h3>
+          <table class="depth">
+            <thead><tr><th>Slot</th><th>Pos</th><th>Player</th><th class="r">Starts</th><th class="r">Value</th></tr></thead>
+            <tbody></tbody>
+          </table>
           <p class="unvalued"></p>
+        </section>
+
+        <div class="lg-side">
+          <section>
+            <h3 class="section-head">Trade fits</h3>
+            <ol class="fits"></ol>
+          </section>
+          <section>
+            <h3 class="section-head">Picks</h3>
+            <table class="pick-board"><thead></thead><tbody></tbody></table>
+          </section>
         </div>
       </div>
     </section>
 
+    <p class="notes"><strong>Notes:</strong> overall blends win-now and dynasty, each as a share of the league's best,
+      50/50. Win-now is the expected weekly lineup on 2026 values; dynasty is every asset star-curved. Position squares shade from 1st
+      (solid) to last (pale); the selected team's bottom three are red. Trade fits pair the selected team with teams
+      strong where it is weak and weak where it is strong, ranked higher when their tiers point opposite ways (one
+      leaning win-now, one leaning dynasty). The depth chart is the best full-strength lineup by Sleeper slot, then the bench by
+      share of simulated weeks started. Age is value-weighted. <span class="picks-note"></span></p>
   </main>
 
   <script src="league.js"></script>

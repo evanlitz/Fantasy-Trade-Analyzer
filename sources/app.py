@@ -4,6 +4,7 @@ from collections import Counter
 from datetime import datetime
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 from common import DATA_DIR
 from league import League
@@ -57,6 +58,14 @@ class Handler(SimpleHTTPRequestHandler):
             return self.send_json({"assets": asset_list(), "built": built.strftime("%b %d, %H:%M")})
         if self.path == "/api/league":
             return self.send_json(cached_league().base)
+        url = urlparse(self.path)
+        if url.path == "/api/league/free-agents":
+            # ?team=<roster id>: free agents re-scored onto that team
+            lg = cached_league()
+            team = parse_qs(url.query).get("team", [""])[0]
+            if not team.isdigit() or int(team) not in lg.rosters:
+                return self.send_json({"error": "team must be a roster id in this league"}, 400)
+            return self.send_json(lg.free_agents(int(team)))
         return super().do_GET()
 
     def do_POST(self):

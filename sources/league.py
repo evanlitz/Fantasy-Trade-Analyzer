@@ -2,9 +2,7 @@ import csv
 import random
 import sys
 
-import requests
-
-from common import DATA_DIR, HEADERS
+from common import DATA_DIR, sleeper_get
 from ids import sleeper_players
 from trade import find, load_assets, verdict
 from trade import raw as star
@@ -25,6 +23,8 @@ SIM_WEEKS = 2000
 WIN_NOW_WEIGHT = 0.5
 # A trade's start-share changes smaller than this aren't worth listing
 START_CHANGE = 0.10
+# Free agents re-scored onto a roster: the top this many by dynasty value plus the top this many by win-now value
+FA_POOL = 25
 # Flock Fantasy's classification: rows are win-now rank bands, columns are dynasty rank bands (top 2, top half, bottom half, bottom 2)
 TIER_GRID = [
     ["Juggernaut", "Strong Contender", "All In", "All In"],
@@ -35,9 +35,7 @@ TIER_GRID = [
 
 
 def get(path):
-    response = requests.get(API + path, headers=HEADERS, timeout=30)
-    response.raise_for_status()
-    return response.json()
+    return sleeper_get(API + path).json()
 
 
 def team_name(roster, users):
@@ -68,6 +66,18 @@ def best_lineup(players, slots):
             lineup.append(pick)
             pool.remove(pick)
     return lineup
+
+
+def lineup_slots(players, slots):
+    # Same picks as best_lineup, kept in the league's slot order with each slot named, for display
+    pool = sorted(players, key=lambda p: -p["now"])
+    filled = {}
+    for i in sorted(range(len(slots)), key=lambda i: len(SLOT_ELIGIBLE[slots[i]])):
+        pick = next((p for p in pool if p["position"] in SLOT_ELIGIBLE[slots[i]]), None)
+        if pick:
+            filled[i] = pick
+            pool.remove(pick)
+    return [{"slot": slot, "id": filled[i]["id"] if i in filled else None} for i, slot in enumerate(slots)]
 
 
 def absences(pid, position):
@@ -126,6 +136,8 @@ class League:
         self.values = {a["Asset ID"]: a for a in assets}
         self.top = max(a["Value"] for a in assets)
         self.now_values = now_values
+        self.sleeper = sleeper
+        self.taken = {pid for r in raw["rosters"] for pid in r["players"] or []}
         self.slots = [s for s in league["roster_positions"] if s in SLOT_ELIGIBLE]
         # Starters plus bench; taxi and IR don't count against it
         self.roster_limit = len(league["roster_positions"])
@@ -198,6 +210,7 @@ class League:
             for p in t["players"]:
                 p["start"] = shares.get(p["id"], 0)
             win_now[rid] = sum(p["now"] * p["start"] for p in active)
+            t["lineup"] = lineup_slots(active, self.slots)
         tiers = project_tiers(self.raw_rosters, win_now)
         for rid, r in rosters.items():
             for p in r["picks"]:
@@ -240,7 +253,7 @@ class League:
         for i, t in enumerate(out, 1):
             t["overall_rank"] = i
         return {"league": self.league["name"], "season": self.league["season"], "pick_seasons": self.seasons,
-                "teams": out}
+                "draft_rounds": self.league["settings"]["draft_rounds"], "teams": out}
 
     def team(self, result, rid):
         return next(t for t in result["teams"] if t["roster_id"] == rid)
@@ -334,9 +347,62 @@ class League:
         return {"roster_id": rid, "team": self.names[rid], "before": snap(before_t), "after": snap(after_t),
                 "starts": starts, "pick_tiers": picks, "cuts": rosters[rid]["cuts"]}
 
+    def free_agent_pool(self):
+        pool = []
+        for pid in set(self.values) | set(self.now_values):
+            if pid in self.taken:
+                continue
+            asset, info = self.values.get(pid), self.sleeper.get(pid, {})
+            position = asset["Position"] if asset else info.get("position")
+            # Redraft-only players need an NFL team; that filters out retired and unsigned names
+            if position not in VALUED_POSITIONS or not (asset or info.get("team")):
+                continue
+            age = (asset["Age"] if asset else info.get("age")) or None
+            pool.append({"id": pid, "name": asset["Player Name"] if asset else info.get("full_name", pid),
+                         "position": position, "team": asset["Team"] if asset else info.get("team"),
+                         "age": float(age) if age else None, "taxi": False, "reserve": False,
+                         "raw": asset["Value"] if asset else 0, "now": self.now_values.get(pid, 0)})
+        top = lambda key: sorted(pool, key=lambda p: -p[key])[:FA_POOL]
+        return list({p["id"]: p for p in top("raw") + top("now")}.values())
+
+    def free_agents(self, rid):
+        # Each free agent added to this team, dropping drop_candidate() when the roster is full, then re-scored.
+        # The drop doesn't depend on the free agent, so it's one per team.
+        before = self.team(self.base, rid)
+        mine = self.rosters[rid]
+        full = mine["spots"] >= self.roster_limit
+        droppable = [p for p in before["players"] if not p["taxi"] and not p["reserve"]]
+        drop = drop_candidate(droppable, mine["unvalued"]) if full else None
+        gone = drop["id"] if drop else None
+        out = []
+        for fa in self.free_agent_pool():
+            rosters = {**self.rosters, rid: {**mine, "players": [p for p in mine["players"] if p["id"] != gone] + [fa],
+                                             "unvalued": [p for p in mine["unvalued"] if p["id"] != gone]}}
+            after = self.team(self.score(rosters), rid)
+            out.append({
+                **{k: fa[k] for k in ("id", "name", "position", "team", "age", "now")}, "value": fa["raw"],
+                "start": next(p["start"] for p in after["players"] if p["id"] == fa["id"]),
+                **{f"{k}_change": after[k] - before[k] for k in ("win_now", "dynasty", "overall")},
+                "tier": after["tier"],
+            })
+        out.sort(key=lambda f: -f["value"])
+        return {"team": self.names[rid], "roster_id": rid, "tier": before["tier"], "record": self.records[rid],
+                "spots": mine["spots"], "limit": self.roster_limit, "full": full,
+                "drop": drop and {"id": drop["id"], "name": drop["name"], "position": drop["position"],
+                                  "value": drop.get("raw", 0), "now": drop.get("now", 0), "start": drop.get("start", 0)},
+                "free_agents": out}
+
     def find(self, query):
         # CLI lookup: player name or any league asset ID, restricted to assets on a roster
         return find(query, [self.market(i) for i in self.owner])["Asset ID"]
+
+
+def drop_candidate(players, unvalued):
+    # Lowest consensus value goes; players no source values count as zero, so they go first
+    spare = [p for p in unvalued if not p["taxi"] and not p["reserve"]]
+    if spare:
+        return spare[0]
+    return min(players, key=lambda p: p["raw"])
 
 
 def league_values(league_id):
@@ -387,12 +453,25 @@ def trade_report(result):
                   + f": projects {p['before']} -> {p['after']}")
 
 
+def free_agent_report(result):
+    d = result["drop"]
+    print(f"Free agents for {result['team']} ({result['tier']}), {result['spots']}/{result['limit']}"
+          + (f", drops {d['name']} ({d['value']:,})" if d else "") + "\n")
+    print(f"{'Player':<26}{'Pos':<5}{'Value':>6}{'Now':>7}{'Starts':>8}{'Win-now':>9}{'Dynasty':>9}")
+    for f in result["free_agents"]:
+        print(f"{f['name'][:25]:<26}{f['position']:<5}{f['value']:>6,}{f['now']:>7,.0f}{f['start']:>8.0%}"
+              f"{f['win_now_change']:>+9,.0f}{f['dynasty_change']:>+9,.0f}")
+
+
 if __name__ == "__main__":
     # python league.py <league_id>                              league report
     # python league.py <league_id> "Jahmyr Gibbs" vs "Garrett Wilson, 2027-1-r4"   trade impact
+    # python league.py <league_id> --fa <roster id>              free agents for that team
     sys.stdout.reconfigure(encoding="utf-8")
     if len(sys.argv) == 2:
         report(league_values(sys.argv[1]))
+    elif sys.argv[2] == "--fa":
+        free_agent_report(League.load(sys.argv[1]).free_agents(int(sys.argv[3])))
     else:
         lg = League.load(sys.argv[1])
         a, _, b = " ".join(sys.argv[2:]).partition(" vs ")

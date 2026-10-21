@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ledger Waivers</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:ital,wght@0,400..900;1,400..900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="wide">
+  <header class="top">
+    <span class="mark">Ledger</span>
+    <nav class="nav"><a href="/">Trade</a><a href="/league.html">League</a><a href="/waivers.html" aria-current="page">Waivers</a></nav>
+    <span class="meta" id="wv-meta">Loading free agents…</span>
+  </header>
+
+  <main class="waivers">
+    <div class="wv-head">
+      <span class="team-select"><select class="team-pick" aria-label="Your team"></select></span>
+      <span class="wv-tier"></span>
+      <span class="wv-rec num"></span>
+      <span class="wv-spots"></span>
+      <span class="wv-cut"></span>
+    </div>
+
+    <div class="wv-bar">
+      <div class="mode wv-pos" role="group" aria-label="Position">
+        <button type="button" data-pos="" aria-pressed="true">All</button>
+        <button type="button" data-pos="QB" aria-pressed="false">QB</button>
+        <button type="button" data-pos="RB" aria-pressed="false">RB</button>
+        <button type="button" data-pos="WR" aria-pressed="false">WR</button>
+        <button type="button" data-pos="TE" aria-pressed="false">TE</button>
+      </div>
+      <span class="wv-count"></span>
+    </div>
+
+    <div class="wv-body">
+      <table class="fa-table">
+        <thead>
+          <tr>
+            <th>Pos</th><th>Player</th>
+            <th class="r"><button type="button" data-sort="value">Value</button></th>
+            <th class="r"><button type="button" data-sort="now">2026</button></th>
+            <th><button type="button" data-sort="start">Starts</button></th>
+            <th class="r"><button type="button" data-sort="win_now_change">Win-now</button></th>
+            <th class="r"><button type="button" data-sort="dynasty_change">Dynasty</button></th>
+            <th>New tier</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+
+      <figure class="wv-map">
+        <figcaption>Win-now against dynasty</figcaption>
+        <svg viewBox="0 0 420 380" role="img" aria-label="Free agents by win-now change and dynasty change"></svg>
+      </figure>
+    </div>
+
+    <p class="notes"><strong>Notes:</strong> each free agent is added to your roster and the whole team re-scored: win-now is the simulated weekly
+      lineup on 2026 values, dynasty is every asset star-curved. With a full roster your lowest consensus-value player is
+      dropped. Only the top 25 free agents by dynasty value and by 2026 value are scored.</p>
+  </main>
+
+  <script src="waivers.js"></script>
+</body>
+</html>

@@ -152,6 +152,23 @@ class LeagueTests(unittest.TestCase):
         # Later drafts are never projected
         self.assertFalse(any(p["season"] != "2027" for p in moved.values()))
 
+    def test_lineup_matches_slots_and_simulation(self):
+        from league import best_lineup
+        for t in self.lg.base["teams"]:
+            self.assertEqual([s["slot"] for s in t["lineup"]], self.lg.slots)
+            active = [p for p in t["players"] if not p["taxi"]]
+            self.assertEqual(sorted(s["id"] for s in t["lineup"] if s["id"]),
+                             sorted(p["id"] for p in best_lineup(active, self.lg.slots)))
+
+    def test_free_agents_skip_rostered_and_fill_open_spot(self):
+        r = self.lg.free_agents(1)
+        self.assertFalse(r["full"])
+        self.assertTrue(r["free_agents"])
+        self.assertFalse({f["id"] for f in r["free_agents"]} & self.lg.taken)
+        self.assertIsNone(r["drop"])
+        # With a spot open, adding a valued player can't lower the dynasty score
+        self.assertTrue(all(f["dynasty_change"] >= 0 for f in r["free_agents"]))
+
     def test_generic_calculator_unchanged(self):
         r = evaluate(["Jahmyr Gibbs"], ["Bijan Robinson"])
         self.assertIn(r["winner"], ("A", "B"))
@@ -174,6 +191,15 @@ class RosterLimitTests(unittest.TestCase):
         self.assertNotIn(cheapest["id"], kept)
         self.assertTrue(set(a) <= kept)
         self.assertEqual(rosters[1]["cuts"], 0)
+
+    def test_full_roster_free_agent_needs_a_drop(self):
+        r = self.lg.free_agents(2)
+        self.assertTrue(r["full"])
+        mine = {p["id"] for p in self.lg.rosters[2]["players"] if not p["taxi"] and not p["reserve"]}
+        self.assertIn(r["drop"]["id"], mine)
+        self.assertNotIn(r["drop"]["id"], {f["id"] for f in r["free_agents"]})
+        # Re-scoring for free agents leaves the league's base scores alone
+        self.assertEqual(self.lg.score(self.lg.rosters)["teams"], self.lg.base["teams"])
 
     def test_even_trade_cuts_nothing(self):
         rosters = self.lg.after_trade(1, {roster_ids(self.lg, 1)[0]}, 2, {roster_ids(self.lg, 2)[0]})

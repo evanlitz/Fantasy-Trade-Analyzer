@@ -3,17 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Ledger — Dynasty Trade Calculator</title>
+  <title>Ledger Trade Calculator</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,400..800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Libre+Franklin:ital,wght@0,400..900;1,400..900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header class="top">
     <span class="mark">Ledger</span>
-    <nav class="nav"><a href="/" aria-current="page">Trade</a><a href="/league.html">League</a></nav>
-    <span class="meta">1QB · PPR · consensus of 8 sources · values built <span id="built">…</span></span>
+    <nav class="nav"><a href="/" aria-current="page">Trade</a><a href="/league.html">League</a><a href="/waivers.html">Waivers</a></nav>
+    <span class="meta">1QB PPR, consensus of 8 sources, values built <span id="built">…</span></span>
   </header>
 
   <main class="calc" data-mode="league">
@@ -78,11 +78,14 @@
     </section>
 
     <section class="impact" hidden>
-      <h3 class="section-head">Team impact <span>both rosters re-scored with the trade · win-now = simulated weekly lineup, dynasty = all assets star-curved</span></h3>
+      <h3 class="section-head">Team impact</h3>
       <div class="impact-grid">
         <div class="impact-team" data-side="a"></div>
         <div class="impact-team" data-side="b"></div>
       </div>
+      <p class="notes"><strong>Notes:</strong> both rosters are re-scored with the trade. Win-now is the simulated
+        weekly lineup on 2026 values; dynasty is every asset star-curved. Lineup bars show the share of simulated
+        weeks in the best lineup, filled after the trade and outlined before.</p>
     </section>
   </main>
 

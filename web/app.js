@@ -56,7 +56,7 @@ function meta(asset, withOwner = false) {
       asset.taxi ? 'taxi' : null];
   }
   if (withOwner && asset.owner) parts.push(teamName(asset.owner));
-  return parts.filter(Boolean).join(' · ');
+  return parts.filter(Boolean).join(', ');
 }
 
 function row(asset, { button, onClick, withOwner = false }) {
@@ -117,7 +117,7 @@ function renderSide(side, result) {
   picked.forEach(p => { counts[p.position] = (counts[p.position] || 0) + 1; });
   const breakdown = Object.entries(counts).map(([pos, n]) => `${n} ${pos}`).join(', ');
   el.querySelector('.pieces').textContent = picked.length
-    ? `${picked.length} piece${picked.length > 1 ? 's' : ''} · ${breakdown}` : '';
+    ? `${picked.length} piece${picked.length > 1 ? 's' : ''}: ${breakdown}` : '';
 
   const total = el.querySelector('.total');
   const final = result ? result[side === 'a' ? 'finalA' : 'finalB'] : picked.reduce((s, p) => s + p.value, 0);
@@ -141,7 +141,7 @@ function renderBrowse(side) {
     if (!group.length) return '';
     const wrap = document.createElement('div');
     wrap.className = 'browse-group';
-    wrap.innerHTML = `<div class="pos-head"><span>${pos} · ${group.length}</span></div>`;
+    wrap.innerHTML = `<div class="pos-head"><span>${pos}</span><span class="num">${group.length}</span></div>`;
     const ol = document.createElement('ol');
     ol.className = 'rows';
     ol.append(...group.map(a => row(a, { button: 'add', onClick: () => add(side, a.id) })));
@@ -174,7 +174,7 @@ function renderResult(result, error) {
   fill.style.left = finalA >= finalB ? `${50 - share * 100}%` : '50%';
 
   if (result.fair) {
-    text.innerHTML = '<span class="fairly">Fair trade</span> <span class="hint">· within 5% on market value</span>';
+    text.innerHTML = '<span class="fairly">Fair trade.</span> <span class="hint">Within 5% on market value.</span>';
     return;
   }
   const winner = result.winner.toLowerCase();
@@ -184,13 +184,13 @@ function renderResult(result, error) {
     // The bigger package is what the winner's partner sends: the team on the other side comes out ahead
     const ahead = teamName(state.lg[teamKey(loser)]);
     text.innerHTML = `<strong></strong> comes out ahead by <span class="delta num">${fmt(result.margin)}</span>
-      <span class="hint">on market value</span>`;
+      <span class="hint">on market value.</span>`;
     text.querySelector('strong').textContent = ahead;
     addTo = `${ahead} could add one to even it`;
   } else {
-    text.innerHTML = `<strong>Favors Team ${result.winner}</strong> · add
-      <span class="delta num">${fmt(result.margin)}</span> to Team ${loser.toUpperCase()} to even it`;
-    addTo = `Players to even it — add to Team ${loser.toUpperCase()}`;
+    text.innerHTML = `<strong>Favors Team ${result.winner}.</strong> Add
+      <span class="delta num">${fmt(result.margin)}</span> to Team ${loser.toUpperCase()} to even it.`;
+    addTo = `Add one of these to Team ${loser.toUpperCase()} to even it`;
   }
 
   if (result.suggestions.length) {
@@ -388,14 +388,14 @@ document.querySelectorAll('.mode button').forEach(b => b.addEventListener('click
     if (!res.ok) throw new Error(res.statusText);
     state.league = await res.json();
     buildLeagueAssets();
-    document.querySelector('.league-name').textContent = `· ${state.league.league}`;
+    document.querySelector('.league-name').textContent = state.league.league;
     document.querySelector('.calc-note').textContent =
-      `${state.teams.size} teams · ${state.league.pick_seasons[0]} picks projected from standings + win-now`;
+      `${state.teams.size} teams. ${state.league.pick_seasons[0]} picks projected from standings and win-now.`;
   } catch {
     const button = document.querySelector('.mode [data-mode="league"]');
     button.disabled = true;
     button.title = 'League data unavailable';
-    document.querySelector('.calc-note').textContent = 'League unavailable · Any player mode only';
+    document.querySelector('.calc-note').textContent = 'League unavailable, Any player mode only';
   }
   restore();
   setupSide('a');

@@ -10,6 +10,7 @@ import dynastyprocess
 import fantasycalc
 import fantasypros
 import ktc
+import points
 import redraft
 import rosteraudit
 from app import LEAGUE_ID
@@ -60,6 +61,8 @@ def refresh():
     if "combine" not in failures:
         step("snapshot", snapshot, failures, ran)
     step(f"sleeper league {LEAGUE_ID}", check_league, failures, ran)
+    step("points", lambda: points.pull(LEAGUE_ID), failures, ran)
+    step("points check", points.check, failures, ran)
 
     print(f"\nRefresh finished: {len(ran) - len(failures)} ok, {len(failures)} failed"
           + (f" ({', '.join(failures)})" if failures else ""))

@@ -8,7 +8,7 @@ const Impact = (() => {
   const signedPct = x => (Math.abs(x) < 0.0005 ? '±0%' : `${x > 0 ? '+' : '−'}${(Math.abs(x) * 100).toFixed(1)}%`);
   const tone = x => (Math.abs(x) < 0.0005 ? '' : x > 0 ? 'pos' : 'neg');
   const tierTag = tier => `<span class="tier ${tier.toLowerCase().replace(/ /g, '-')}">${tier}</span>`;
-  const ordinal = r => ['1st', '2nd', '3rd'][r - 1] || `${r}th`;
+  const ordinal = r => (r % 100 >= 11 && r % 100 <= 13 ? `${r}th` : `${r}${['th', 'st', 'nd', 'rd'][r % 10] || 'th'}`);
   const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   // One line in plain words, from the two scores the league page already uses (1% either way counts as unchanged)
@@ -43,10 +43,10 @@ const Impact = (() => {
     const rb = t.before[`${key}_rank`];
     const ra = t.after[`${key}_rank`];
     const x = change(a, b);
-    return `<div class="metric" title="${label}: ${fmt(b)} → ${fmt(a)} (${note}) · rank ${rb} → ${ra} of ${n}">
+    return `<div class="metric" title="${label}: ${fmt(b)} to ${fmt(a)} (${note}), rank ${rb} to ${ra} of ${n}">
       <span class="metric-label">${label}</span>
       ${ladder(rb, ra, n)}
-      <span class="metric-rank num">${rb === ra ? `#${ra}` : `#${rb}→#${ra}`}</span>
+      <span class="metric-rank num">${rb === ra ? ordinal(ra) : `${ordinal(rb)} <span class="to">to</span> ${ordinal(ra)}`}</span>
       <span class="metric-value num">${fmt(a)}</span>
       <span class="metric-delta num ${tone(x)}">${signedPct(x)}</span>
     </div>`;
@@ -61,7 +61,7 @@ const Impact = (() => {
       const d = a - b;
       const w = scale ? (Math.abs(d) / scale) * 50 : 0;
       const bar = Math.round(d) ? `<span class="div-fill ${pos}" style="left:${d > 0 ? 50 : 50 - w}%;width:${w}%"></span>` : '';
-      return `<div class="pos-row" title="${pos}: ${fmt(b)} → ${fmt(a)}">
+      return `<div class="pos-row" title="${pos}: ${fmt(b)} to ${fmt(a)}">
         <span class="tag ${pos}">${pos}</span>
         <div class="div-bar">${bar}<span class="div-mid"></span></div>
         <span class="num pos-delta ${Math.round(d) ? (d > 0 ? 'pos' : 'neg') : 'zero'}">${signed(d)}</span>
@@ -72,13 +72,13 @@ const Impact = (() => {
   function lineup(t) {
     if (!t.starts.length) return '<p class="impact-empty">No lineup changes</p>';
     return `<ol class="lineup">${t.starts.map(s => {
-      const note = s.arrived ? `${pct(s.before)} there → ${pct(s.after)} here` : `${pct(s.before)} → ${pct(s.after)}`;
+      const note = s.arrived ? `${pct(s.before)} there, ${pct(s.after)} here` : `${pct(s.before)} to ${pct(s.after)}`;
       return `<li class="lu-row" title="In the best lineup ${note} of simulated weeks">
         <span class="tag ${s.position}">${s.position}</span>
         <span class="lu-name">${esc(s.name)}</span>
         <span class="lu-in">${s.arrived ? 'IN' : ''}</span>
         <span class="lu-meter"><span class="lu-now ${s.position}" style="width:${s.after * 100}%"></span><span class="lu-was" style="width:${s.before * 100}%"></span></span>
-        <span class="num lu-pct">${s.arrived ? pct(s.after) : `${pct(s.before)}→${pct(s.after)}`}</span>
+        <span class="num lu-pct">${s.arrived ? pct(s.after) : `${pct(s.before)} <span class="to">to</span> ${pct(s.after)}`}</span>
       </li>`;
     }).join('')}</ol>`;
   }
@@ -87,7 +87,7 @@ const Impact = (() => {
     if (!t.pick_tiers.length) return '';
     return `<h4 class="impact-sub">Pick projections</h4><ol class="pick-moves">${t.pick_tiers.map(p =>
       `<li><span class="tag PICK">PICK</span><span>${p.season} ${ordinal(p.round)}${p.from ? ` <small>from ${esc(p.from)}</small>` : ' <small>own</small>'}</span>
-        <span class="tier-move"><span class="pick-tier">${p.before}</span>→<span class="pick-tier now">${p.after}</span></span></li>`).join('')}</ol>`;
+        <span class="tier-move"><span class="pick-tier">${p.before}</span><span class="to">to</span><span class="pick-tier now">${p.after}</span></span></li>`).join('')}</ol>`;
   }
 
   function panel(t, n, scale) {
@@ -96,12 +96,12 @@ const Impact = (() => {
     return `
       <div class="impact-head">
         <span class="impact-name">${esc(t.team)}</span>
-        <span class="impact-rank num">#${t.before.overall_rank}${t.before.overall_rank !== t.after.overall_rank ? `→#${t.after.overall_rank}` : ''} of ${n}</span>
-        <span class="impact-overall num" title="Overall ${t.before.overall.toFixed(1)} → ${t.after.overall.toFixed(1)}">${t.after.overall.toFixed(1)}</span>
+        <span class="impact-rank num">${ordinal(t.before.overall_rank)}${t.before.overall_rank !== t.after.overall_rank ? ` to ${ordinal(t.after.overall_rank)}` : ''} of ${n}</span>
+        <span class="impact-overall num" title="Overall ${t.before.overall.toFixed(1)} to ${t.after.overall.toFixed(1)}">${t.after.overall.toFixed(1)}</span>
       </div>
       <div class="impact-body">
         <div class="impact-summary">
-          <span class="tier-move">${moved ? `${tierTag(t.before.tier)}<span class="arrow">→</span>${tierTag(t.after.tier)}`
+          <span class="tier-move">${moved ? `${tierTag(t.before.tier)}<span class="arrow">to</span>${tierTag(t.after.tier)}`
             : `${tierTag(t.after.tier)}<span class="holds">holds</span>`}</span>
           <span class="headline">${headline(t)}</span>
           <span class="num overall-delta ${Math.abs(dOverall) < 0.05 ? '' : dOverall > 0 ? 'pos' : 'neg'}">${signed(dOverall, x => x.toFixed(1))} overall</span>
@@ -110,7 +110,7 @@ const Impact = (() => {
         ${metric('Dynasty', 'dynasty', t, n, 'all assets, star-curved')}
         <h4 class="impact-sub">Dynasty value by position</h4>
         <div class="pos-rows">${positions(t, scale)}</div>
-        <h4 class="impact-sub">Lineup <small>share of simulated weeks in the best lineup · outline = before</small></h4>
+        <h4 class="impact-sub">Lineup</h4>
         ${lineup(t)}
         ${picks(t)}
       </div>`;

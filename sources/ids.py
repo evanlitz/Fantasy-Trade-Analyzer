@@ -7,7 +7,7 @@ from functools import cache
 
 import requests
 
-from common import DATA_DIR, HEADERS
+from common import DATA_DIR, HEADERS, sleeper_get
 
 CROSSWALK_URL = "https://raw.githubusercontent.com/dynastyprocess/data/master/files/db_playerids.csv"
 SLEEPER_URL = "https://api.sleeper.app/v1/players/nfl"
@@ -58,8 +58,7 @@ def sleeper_id_from(field, value):
 def sleeper_players(force=False):
     DATA_DIR.mkdir(exist_ok=True)
     if force or not SLEEPER_CACHE.exists() or time.time() - SLEEPER_CACHE.stat().st_mtime > SLEEPER_MAX_AGE:
-        response = requests.get(SLEEPER_URL, headers=HEADERS, timeout=120)
-        response.raise_for_status()
+        response = sleeper_get(SLEEPER_URL, timeout=120)
         # parse before caching so an error page never becomes the cache for a day
         json.loads(response.text)
         SLEEPER_CACHE.write_text(response.text, encoding="utf-8")
