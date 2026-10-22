@@ -11,14 +11,13 @@ import fantasycalc
 import fantasypros
 import ktc
 import points
-import redraft
 import rosteraudit
 from app import LEAGUE_ID
 from common import DATA_DIR
 from ids import sleeper_players
 from league import league_values
 
-SOURCES = [ktc, fantasycalc, dynastyprocess, rosteraudit, dynasty_daddy, dynastydealer, fantasypros, redraft]
+SOURCES = [ktc, fantasycalc, dynastyprocess, rosteraudit, dynasty_daddy, dynastydealer, fantasypros]
 
 
 def step(name, fn, failures, ran):
@@ -60,9 +59,11 @@ def refresh():
     # Skipped when combine failed, so yesterday's consensus is never saved under today's date
     if "combine" not in failures:
         step("snapshot", snapshot, failures, ran)
-    step(f"sleeper league {LEAGUE_ID}", check_league, failures, ran)
+    # Before the league check, which values win-now from points.csv
     step("points", lambda: points.pull(LEAGUE_ID), failures, ran)
     step("points check", points.check, failures, ran)
+    step("scoring check", lambda: points.check_scoring(LEAGUE_ID), failures, ran)
+    step(f"sleeper league {LEAGUE_ID}", check_league, failures, ran)
 
     print(f"\nRefresh finished: {len(ran) - len(failures)} ok, {len(failures)} failed"
           + (f" ({', '.join(failures)})" if failures else ""))

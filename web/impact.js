@@ -2,6 +2,7 @@
 const Impact = (() => {
   const POSITIONS = ['QB', 'RB', 'WR', 'TE', 'PICK'];
   const fmt = n => Math.round(n).toLocaleString('en-US');
+  const pts = n => n.toFixed(1);
   const signed = (n, f = fmt) => (Math.round(n) === 0 ? '±0' : `${n > 0 ? '+' : '−'}${f(Math.abs(n))}`);
   const pct = x => `${Math.round(x * 100)}%`;
   const change = (after, before) => (before ? after / before - 1 : 0);
@@ -37,17 +38,17 @@ const Impact = (() => {
     return `<div class="ladder" style="--n:${n}">${cells}</div>`;
   }
 
-  function metric(label, key, t, n, note) {
+  function metric(label, key, t, n, note, f = fmt) {
     const b = t.before[key];
     const a = t.after[key];
     const rb = t.before[`${key}_rank`];
     const ra = t.after[`${key}_rank`];
     const x = change(a, b);
-    return `<div class="metric" title="${label}: ${fmt(b)} to ${fmt(a)} (${note}), rank ${rb} to ${ra} of ${n}">
+    return `<div class="metric" title="${label}: ${f(b)} to ${f(a)} (${note}), rank ${rb} to ${ra} of ${n}">
       <span class="metric-label">${label}</span>
       ${ladder(rb, ra, n)}
       <span class="metric-rank num">${rb === ra ? ordinal(ra) : `${ordinal(rb)} <span class="to">to</span> ${ordinal(ra)}`}</span>
-      <span class="metric-value num">${fmt(a)}</span>
+      <span class="metric-value num">${f(a)}</span>
       <span class="metric-delta num ${tone(x)}">${signedPct(x)}</span>
     </div>`;
   }
@@ -75,7 +76,7 @@ const Impact = (() => {
       const note = s.arrived ? `${pct(s.before)} there, ${pct(s.after)} here` : `${pct(s.before)} to ${pct(s.after)}`;
       return `<li class="lu-row" title="In the best lineup ${note} of simulated weeks">
         <span class="tag ${s.position}">${s.position}</span>
-        <span class="lu-name">${esc(s.name)}</span>
+        <span class="lu-name">${esc(s.name)}${s.projected ? '' : ' <small>no proj.</small>'}</span>
         <span class="lu-in">${s.arrived ? 'IN' : ''}</span>
         <span class="lu-meter"><span class="lu-now ${s.position}" style="width:${s.after * 100}%"></span><span class="lu-was" style="width:${s.before * 100}%"></span></span>
         <span class="num lu-pct">${s.arrived ? pct(s.after) : `${pct(s.before)} <span class="to">to</span> ${pct(s.after)}`}</span>
@@ -106,7 +107,7 @@ const Impact = (() => {
           <span class="headline">${headline(t)}</span>
           <span class="num overall-delta ${Math.abs(dOverall) < 0.05 ? '' : dOverall > 0 ? 'pos' : 'neg'}">${signed(dOverall, x => x.toFixed(1))} overall</span>
         </div>
-        ${metric('Win-now', 'win_now', t, n, 'simulated weekly lineup')}
+        ${metric('Win-now', 'win_now', t, n, 'projected points per week', pts)}
         ${metric('Dynasty', 'dynasty', t, n, 'all assets, star-curved')}
         <h4 class="impact-sub">Dynasty value by position</h4>
         <div class="pos-rows">${positions(t, scale)}</div>

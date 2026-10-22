@@ -8,7 +8,10 @@ const STRONG = 0.25;
 
 const fmt = n => Math.round(n).toLocaleString('en-US');
 const pct = x => `${Math.round(x * 100)}%`;
-const signed = n => (Math.round(n) === 0 ? '0' : `${n > 0 ? '+' : '−'}${fmt(Math.abs(n))}`);
+// Win-now is points per week, so it keeps one decimal; dynasty values are whole numbers
+const isZero = (n, places) => Number(Math.abs(n).toFixed(places)) === 0;
+const signed = (n, places = 0) => (isZero(n, places) ? '0'
+  : `${n > 0 ? '+' : '−'}${places ? Math.abs(n).toFixed(places) : fmt(Math.abs(n))}`);
 const tierTag = tier => `<span class="tier ${tier.toLowerCase().replace(/ /g, '-')}">${tier}</span>`;
 const shortName = name => name.split(' ').slice(1).join(' ') || name;
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -26,10 +29,11 @@ function store(key, value) {
 const visible = () => state.data.free_agents.filter(f => !state.pos || f.position === state.pos);
 const belowCut = f => state.data.drop && f.value < state.data.drop.value;
 
-function deltaCell(value, max) {
-  const strong = Math.round(value) !== 0 && Math.abs(value) >= STRONG * max;
-  const cls = Math.round(value) === 0 ? 'zero' : strong ? (value > 0 ? 'pos' : 'neg') : '';
-  return `<td class="r num delta ${cls}">${signed(value)}</td>`;
+function deltaCell(value, max, places = 0) {
+  const zero = isZero(value, places);
+  const strong = !zero && Math.abs(value) >= STRONG * max;
+  const cls = zero ? 'zero' : strong ? (value > 0 ? 'pos' : 'neg') : '';
+  return `<td class="r num delta ${cls}">${signed(value, places)}</td>`;
 }
 
 function cutRow(d) {
@@ -59,10 +63,10 @@ function renderTable() {
       <td><span class="tag ${f.position}">${f.position}</span></td>
       <td class="fa-name">${esc(f.name)}<small>${esc(meta)}</small></td>
       <td class="r num strong-num">${f.value ? fmt(f.value) : '—'}</td>
-      <td class="r num">${fmt(f.now)}</td>
+      <td class="r num">${f.projected ? f.now.toFixed(1) : '<small>no proj.</small>'}</td>
       <td><span class="fa-start"><span class="lu-meter"><span class="lu-now ${f.position}" style="width:${f.start * 100}%"></span></span>
         <span class="num">${pct(f.start)}</span></span></td>
-      ${deltaCell(f.win_now_change, maxNow)}${deltaCell(f.dynasty_change, maxDyn)}
+      ${deltaCell(f.win_now_change, maxNow, 1)}${deltaCell(f.dynasty_change, maxDyn)}
       <td class="fa-tier">${moved}</td></tr>`);
   }
   if (!cutDone && list.length) rows.push(cutRow(d));
@@ -99,8 +103,8 @@ function renderMap() {
     <line class="zero" x1="${left}" x2="${w - right}" y1="${zy}" y2="${zy}"/>
     ${corner('Helps both', w - right - 6, top + 14, 'end')}${corner('Stash', left + 6, top + 14, 'start')}
     ${corner('Now only', w - right - 6, h - bottom - 8, 'end')}${corner('Neither', left + 6, h - bottom - 8, 'start')}
-    <text class="tick" x="${left}" y="${h - 10}">${signed(x0)}</text>
-    <text class="tick" x="${w - right}" y="${h - 10}" text-anchor="end">${signed(x1)}</text>
+    <text class="tick" x="${left}" y="${h - 10}">${signed(x0, 1)}</text>
+    <text class="tick" x="${w - right}" y="${h - 10}" text-anchor="end">${signed(x1, 1)}</text>
     <text class="axis" x="${(left + w - right) / 2}" y="${h - 10}" text-anchor="middle">Win-now change</text>
     <text class="tick" x="${left - 4}" y="${top + 8}" text-anchor="end">${signed(y1)}</text>
     <text class="tick" x="${left - 4}" y="${h - bottom}" text-anchor="end">${signed(y0)}</text>

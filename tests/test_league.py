@@ -15,7 +15,7 @@ TEAMS = 4
 PER_TEAM = 11  # one open roster spot each
 
 
-def make_league(full=False):
+def make_league(full=False, unprojected=()):
     assets = load_assets()
     players = [a for a in assets if a["Type"] == "Player"]
     by_pos = {pos: [a for a in players if a["Position"] == pos] for pos in ("QB", "RB", "WR", "TE")}
@@ -34,8 +34,8 @@ def make_league(full=False):
         "traded": [{"season": "2027", "round": 1, "roster_id": 4, "owner_id": 1}],
         "drafts": [{"season": "2026", "status": "complete"}],
     }
-    # Redraft values stand in as dynasty values scaled down; only their order matters here
-    now = {a["Asset ID"]: a["Value"] / 10 for a in players}
+    # Points per week stand in as dynasty values scaled down; only their order matters here
+    now = {a["Asset ID"]: a["Value"] / 10 for a in players if a["Asset ID"] not in unprojected}
     sleeper = {a["Asset ID"]: {"position": a["Position"], "full_name": a["Player Name"]} for a in players}
     return League(raw, assets, now, sleeper)
 
@@ -168,6 +168,20 @@ class LeagueTests(unittest.TestCase):
         self.assertIsNone(r["drop"])
         # With a spot open, adding a valued player can't lower the dynasty score
         self.assertTrue(all(f["dynasty_change"] >= 0 for f in r["free_agents"]))
+
+    def test_unprojected_player_counts_zero_and_is_marked(self):
+        star_id = best(self.lg, 1)
+        lg = make_league(unprojected={star_id})
+        star_p = next(p for p in lg.team(lg.base, 1)["players"] if p["id"] == star_id)
+        self.assertEqual((star_p["projected"], star_p["now"]), (False, 0))
+        self.assertTrue(all(p["projected"] for p in lg.team(lg.base, 2)["players"]))
+        self.assertLess(lg.team(lg.base, 1)["win_now"], self.lg.team(self.lg.base, 1)["win_now"])
+
+    def test_per_week_spreads_rest_of_season_over_weeks_left(self):
+        from league import per_week
+        # Week 7 through 18 is 12 weeks, byes included
+        self.assertEqual(per_week({"Week": "7", "Rest of Season": "240.0"}), 20.0)
+        self.assertEqual(per_week({"Week": "18", "Rest of Season": "15.5"}), 15.5)
 
     def test_generic_calculator_unchanged(self):
         r = evaluate(["Jahmyr Gibbs"], ["Bijan Robinson"])

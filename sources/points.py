@@ -6,7 +6,7 @@ from datetime import date
 import requests
 
 from common import DATA_DIR, HEADERS, normalize_team, sleeper_get
-from ids import sleeper_id_from
+from ids import sleeper_id_from, sleeper_players
 from league import get
 
 # Undocumented (the host Sleeper's own app uses); api.sleeper.app/v1/projections went empty in 2026
@@ -134,8 +134,44 @@ def check():
         raise RuntimeError("Sleeper and nflverse disagree on raw stats")
 
 
+def score_mismatches(matchups, stats, scoring):
+    # Sleeper's matchups carry the league's own score for every rostered player, so score() must match them exactly.
+    # A player missing from stats didn't play and must have scored 0
+    off = []
+    for matchup in matchups:
+        for pid, points in matchup["players_points"].items():
+            ours = score(stats[pid]["stats"], scoring) if pid in stats else 0
+            if abs(ours - points) > 0.005:
+                off.append((pid, ours, points))
+    return off
+
+
+def check_scoring(league_id):
+    state = get("/state/nfl")
+    week = state["week"] - 1
+    if state["season_type"] != "regular" or week < 1:
+        print("scoring check: no finished week to check yet")
+        return
+    scoring = get(f"/league/{league_id}")["scoring_settings"]
+    stats = stat_lines("stats", state["season"], week)
+    matchups = get(f"/league/{league_id}/matchups/{week}")
+    # Kickers and defenses aren't pulled, so only skill players are checked
+    players = sleeper_players()
+    for m in matchups:
+        m["players_points"] = {pid: p for pid, p in m["players_points"].items()
+                               if players.get(pid, {}).get("position") in POSITIONS}
+    off = score_mismatches(matchups, stats, scoring)
+    checked = sum(len(m["players_points"]) for m in matchups)
+    print(f"scoring check week {week}: {checked} rostered players, {len(off)} differ from the league's matchup points")
+    for pid, ours, theirs in off[:20]:
+        print(f"  {players.get(pid, {}).get('full_name', pid)}: ours {ours}, league {theirs}")
+    if off:
+        raise RuntimeError("league-scored points differ from Sleeper's matchup points")
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
     from app import LEAGUE_ID
     pull(LEAGUE_ID)
     check()
+    check_scoring(LEAGUE_ID)

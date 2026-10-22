@@ -7,7 +7,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "sources"))
 
 import common  # noqa: E402
-from points import check_failed, compare, score  # noqa: E402
+from points import check_failed, compare, score, score_mismatches  # noqa: E402
 
 SCORING = {"pass_yd": 0.04, "pass_td": 4.0, "pass_int": -2.0, "rush_yd": 0.1, "rec": 1.0, "fum": 0.0}
 
@@ -21,6 +21,19 @@ class ScoreTest(unittest.TestCase):
 
     def test_empty_line(self):
         self.assertEqual(score({}, SCORING), 0)
+
+
+class ScoreMismatchesTest(unittest.TestCase):
+    def test_matches_league_points(self):
+        stats = {"1": {"stats": {"pass_yd": 300.0, "pass_int": 1.0}}, "2": {"stats": {"rec": 5.0, "pts_ppr": 5.0}}}
+        matchups = [{"players_points": {"1": 10.0, "2": 5.0}}, {"players_points": {"3": 0.0}}]
+        self.assertEqual(score_mismatches(matchups, stats, SCORING), [])
+
+    def test_wrong_score_and_missing_scorer(self):
+        # Sleeper's pts_ppr would give 11.0 for the interception; the league says 10.0
+        stats = {"1": {"stats": {"pass_yd": 300.0, "pass_int": 1.0}}}
+        matchups = [{"players_points": {"1": 11.0, "3": 6.2}}]
+        self.assertEqual(score_mismatches(matchups, stats, SCORING), [("1", 10.0, 11.0), ("3", 0, 6.2)])
 
 
 class CompareTest(unittest.TestCase):

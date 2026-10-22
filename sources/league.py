@@ -16,9 +16,11 @@ SLOT_ELIGIBLE = {
     "QB": {"QB"}, "RB": {"RB"}, "WR": {"WR"}, "TE": {"TE"}, "FLEX": {"RB", "WR", "TE"},
     "WRRB_FLEX": {"RB", "WR"}, "REC_FLEX": {"WR", "TE"}, "SUPER_FLEX": {"QB", "RB", "WR", "TE"},
 }
-# Weekly chance a player is unavailable: rough per-position injury estimates (not measured) plus one bye in 17 weeks
+# Weekly chance a player is unavailable: rough per-position injury estimates (not measured). Byes aren't here;
+# per_week() already spreads them over the weeks left
 ABSENCE = {"QB": 0.10, "RB": 0.18, "WR": 0.13, "TE": 0.13}
-BYE = 1 / 17
+# Last regular-season week, as in points.py (which imports league, so it can't be imported here)
+LAST_WEEK = 18
 SIM_WEEKS = 2000
 WIN_NOW_WEIGHT = 0.5
 # A trade's start-share changes smaller than this aren't worth listing
@@ -51,9 +53,17 @@ def pick_seasons(league, drafts):
     return [str(s) for s in range(first, first + FUTURE_SEASONS)]
 
 
-def redraft_values():
-    with open(DATA_DIR / "redraft.csv", encoding="utf-8") as f:
-        return {r["Asset ID"]: float(r["Value"]) for r in csv.DictReader(f)}
+def per_week(row):
+    # Rest of season spread over every week left, byes included: a bye or known absence still ahead lowers the
+    # weekly figure, so the absence simulation only adds unforeseen injuries
+    return float(row["Rest of Season"]) / (LAST_WEEK - int(row["Week"]) + 1)
+
+
+def weekly_points():
+    # Sleeper's league-scored projections. Players with no rest-of-season projection (IR, unsigned) are left out
+    # and count as 0 toward win-now
+    with open(DATA_DIR / "points.csv", encoding="utf-8") as f:
+        return {r["Asset ID"]: per_week(r) for r in csv.DictReader(f) if r["Rest of Season"]}
 
 
 def best_lineup(players, slots):
@@ -84,8 +94,7 @@ def absences(pid, position):
     # Seeded by the player's own ID, so a player misses the same simulated weeks on any roster and a trade's
     # before/after difference is the trade, not simulation noise
     rng = random.Random(f"absence-{pid}")
-    miss = ABSENCE[position] + BYE
-    return [rng.random() < miss for _ in range(SIM_WEEKS)]
+    return [rng.random() < ABSENCE[position] for _ in range(SIM_WEEKS)]
 
 
 def start_shares(players, slots, absent):
@@ -162,7 +171,8 @@ class League:
                     continue
                 players.append({"id": pid, "name": asset["Player Name"], "position": asset["Position"], **flags,
                                 "team": asset["Team"], "age": float(asset["Age"]) if asset["Age"] else None,
-                                "raw": asset["Value"], "now": now_values.get(pid, 0)})
+                                "raw": asset["Value"], "now": now_values.get(pid, 0),
+                                "projected": pid in now_values})
             spots = sum(1 for pid in r["players"] or [] if pid not in taxi and pid not in reserve)
             self.rosters[r["roster_id"]] = {"players": players, "picks": [], "unvalued": unvalued, "spots": spots}
 
@@ -182,7 +192,7 @@ class League:
 
     @classmethod
     def load(cls, league_id):
-        return cls(fetch(league_id), load_assets(), redraft_values(), sleeper_players())
+        return cls(fetch(league_id), load_assets(), weekly_points(), sleeper_players())
 
     def shares(self, active):
         key = frozenset(p["id"] for p in active)
@@ -332,7 +342,7 @@ class League:
         # here whose share moved enough to matter
         before_starts = {p["id"]: p["start"] for r in (rid, other) for p in self.team(self.base, r)["players"]}
         had = {p["id"] for p in before_t["players"]}
-        starts = [{"id": p["id"], "name": p["name"], "position": p["position"],
+        starts = [{"id": p["id"], "name": p["name"], "position": p["position"], "projected": p["projected"],
                    "before": before_starts[p["id"]], "after": p["start"], "arrived": p["id"] not in had}
                   for p in after_t["players"]
                   if p["id"] not in had or abs(p["start"] - before_starts[p["id"]]) >= START_CHANGE]
@@ -354,14 +364,15 @@ class League:
                 continue
             asset, info = self.values.get(pid), self.sleeper.get(pid, {})
             position = asset["Position"] if asset else info.get("position")
-            # Redraft-only players need an NFL team; that filters out retired and unsigned names
+            # Projection-only players need an NFL team; that filters out retired and unsigned names
             if position not in VALUED_POSITIONS or not (asset or info.get("team")):
                 continue
             age = (asset["Age"] if asset else info.get("age")) or None
             pool.append({"id": pid, "name": asset["Player Name"] if asset else info.get("full_name", pid),
                          "position": position, "team": asset["Team"] if asset else info.get("team"),
                          "age": float(age) if age else None, "taxi": False, "reserve": False,
-                         "raw": asset["Value"] if asset else 0, "now": self.now_values.get(pid, 0)})
+                         "raw": asset["Value"] if asset else 0, "now": self.now_values.get(pid, 0),
+                         "projected": pid in self.now_values})
         top = lambda key: sorted(pool, key=lambda p: -p[key])[:FA_POOL]
         return list({p["id"]: p for p in top("raw") + top("now")}.values())
 
@@ -380,7 +391,7 @@ class League:
                                              "unvalued": [p for p in mine["unvalued"] if p["id"] != gone]}}
             after = self.team(self.score(rosters), rid)
             out.append({
-                **{k: fa[k] for k in ("id", "name", "position", "team", "age", "now")}, "value": fa["raw"],
+                **{k: fa[k] for k in ("id", "name", "position", "team", "age", "now", "projected")}, "value": fa["raw"],
                 "start": next(p["start"] for p in after["players"] if p["id"] == fa["id"]),
                 **{f"{k}_change": after[k] - before[k] for k in ("win_now", "dynasty", "overall")},
                 "tier": after["tier"],
@@ -415,7 +426,7 @@ def report(result):
     print(f"{'#':>2}  {'Team':<24}{'Tier':<18}{'Rec':>5}{'Overall':>9}{'Win-now':>12}{'Dynasty':>12}")
     for i, t in enumerate(result["teams"], 1):
         print(f"{i:>2}  {t['team'][:23]:<24}{t['tier']:<18}{t['record']:>5}{t['overall']:>9.1f}"
-              f"{t['win_now']:>8,.0f} #{t['win_now_rank']:<2}{t['dynasty']:>8,.0f} #{t['dynasty_rank']:<2}")
+              f"{t['win_now']:>8.1f} #{t['win_now_rank']:<2}{t['dynasty']:>8,.0f} #{t['dynasty_rank']:<2}")
     print()
     for t in result["teams"]:
         picks = ", ".join(f"{p['season'][2:]} R{p['round']} {p['tier']}" + (f" (from {p['from']})" if p["from"] else "")
@@ -440,8 +451,8 @@ def trade_report(result):
         t = result["teams"][label]
         b, a = t["before"], t["after"]
         print(f"\n{t['team']}: {b['tier']} -> {a['tier']}, overall {b['overall']:.1f} -> {a['overall']:.1f}")
-        print(f"  win-now {b['win_now']:,.0f} #{b['win_now_rank']} -> {a['win_now']:,.0f} #{a['win_now_rank']} "
-              f"({a['win_now'] - b['win_now']:+,.0f})")
+        print(f"  win-now {b['win_now']:.1f} #{b['win_now_rank']} -> {a['win_now']:.1f} #{a['win_now_rank']} "
+              f"({a['win_now'] - b['win_now']:+.1f} pts/wk)")
         print(f"  dynasty {b['dynasty']:,.0f} #{b['dynasty_rank']} -> {a['dynasty']:,.0f} #{a['dynasty_rank']} "
               f"({a['dynasty'] - b['dynasty']:+,.0f})")
         print("  by position: " + ", ".join(f"{pos} {a['positions'][pos] - b['positions'][pos]:+,.0f}"
@@ -457,10 +468,10 @@ def free_agent_report(result):
     d = result["drop"]
     print(f"Free agents for {result['team']} ({result['tier']}), {result['spots']}/{result['limit']}"
           + (f", drops {d['name']} ({d['value']:,})" if d else "") + "\n")
-    print(f"{'Player':<26}{'Pos':<5}{'Value':>6}{'Now':>7}{'Starts':>8}{'Win-now':>9}{'Dynasty':>9}")
+    print(f"{'Player':<26}{'Pos':<5}{'Value':>6}{'Pts/wk':>7}{'Starts':>8}{'Win-now':>9}{'Dynasty':>9}")
     for f in result["free_agents"]:
-        print(f"{f['name'][:25]:<26}{f['position']:<5}{f['value']:>6,}{f['now']:>7,.0f}{f['start']:>8.0%}"
-              f"{f['win_now_change']:>+9,.0f}{f['dynasty_change']:>+9,.0f}")
+        print(f"{f['name'][:25]:<26}{f['position']:<5}{f['value']:>6,}{f['now']:>7.1f}{f['start']:>8.0%}"
+              f"{f['win_now_change']:>+9.1f}{f['dynasty_change']:>+9,.0f}")
 
 
 if __name__ == "__main__":

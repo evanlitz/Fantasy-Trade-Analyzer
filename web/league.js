@@ -7,6 +7,7 @@ const DIRECTION_BONUS = 3;
 const FITS = 3;
 
 const fmt = n => Math.round(n).toLocaleString('en-US');
+const pts = n => n.toFixed(1);
 const pct = x => `${Math.round(x * 100)}%`;
 const ordinal = r => (r % 100 >= 11 && r % 100 <= 13 ? `${r}th` : `${r}${['th', 'st', 'nd', 'rd'][r % 10] || 'th'}`);
 const tierTag = tier => `<span class="tier ${tier.toLowerCase().replace(/ /g, '-')}">${tier}</span>`;
@@ -53,7 +54,7 @@ function renderStandings() {
     return `<tr data-rid="${rid}" class="${sel ? 'selected' : ''}">
       <td class="r num">${r.overall[rid]}</td><td class="tname">${esc(t.team)}</td><td>${tierTag(t.tier)}</td>
       <td class="r num">${t.record}</td><td class="r num strong">${t.overall.toFixed(1)}</td>
-      <td class="r num">${fmt(t.win_now)} <span class="rk">${ordinal(r.win_now[rid])}</span></td>
+      <td class="r num">${pts(t.win_now)} <span class="rk">${ordinal(r.win_now[rid])}</span></td>
       <td class="r num">${fmt(t.dynasty)} <span class="rk">${ordinal(r.dynasty[rid])}</span></td>
       ${GROUPS.map(g => square(r[g][rid], sel && r[g][rid] > n() - 3)).join('')}
       <td class="r num">${t.age ? t.age.toFixed(1) : '–'}</td></tr>`;
@@ -63,7 +64,8 @@ function renderStandings() {
 
 /* depth chart: the best full-strength lineup by Sleeper slot, then bench by start share, then taxi */
 function playerCells(p, starter) {
-  const meta = [p.team, p.age ? p.age.toFixed(1) : null].filter(Boolean).join(' ') + (p.reserve ? ', IR' : '');
+  const meta = [p.team, p.age ? p.age.toFixed(1) : null].filter(Boolean).join(' ') + (p.reserve ? ', IR' : '')
+    + (p.projected || p.taxi ? '' : ', no proj.');
   return `<td><span class="tag ${p.position}">${p.position}</span></td>
     <td class="d-name">${esc(p.name)}<small>${esc(meta)}</small></td>
     <td class="r num${starter ? ' strong' : ''}">${p.taxi ? '–' : pct(p.start)}</td>
@@ -151,7 +153,7 @@ function select(rid) {
   const stat = (label, value, rank) => `<div class="stat"><span class="stat-label">${label}</span>
     <span class="stat-value num">${value}</span><span class="stat-rank">${ordinal(rank)}</span></div>`;
   document.querySelector('.stats').innerHTML =
-    stat('Win-now', fmt(t.win_now), r.win_now[rid])
+    stat('Win-now', pts(t.win_now), r.win_now[rid])
     + stat('Dynasty', fmt(t.dynasty), r.dynasty[rid])
     + stat(`Picks (${t.picks.length})`, fmt(t.positions.PICK), r.PICK[rid])
     + stat('Age', t.age ? t.age.toFixed(1) : '–', r.age[rid]);
